@@ -39,4 +39,3 @@ npm run build
 - GSAP for cinematic timelines
 - Vercel deployment, analytics, and performance monitoring
 - Sanity, Neon, Midtrans, and Biteship planned as milestone integrations
-Git deployment connected.

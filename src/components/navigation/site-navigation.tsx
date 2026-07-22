@@ -1,18 +1,68 @@
-const items = ["VISR", "Halo Collection", "Carry", "Exhibition"] as const;
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+
+const items = [
+  { label: "Halo Collection", href: "#halo" },
+  { label: "Carry", href: "#carry" },
+  { label: "Exhibition", href: "#exhibition" },
+] as const;
 
 export function SiteNavigation() {
+  const previousScrollRef = useRef(0);
+  const [revealed, setRevealed] = useState(false);
+  const [direction, setDirection] = useState<"up" | "down">("up");
+
+  useEffect(() => {
+    function revealNavigation() {
+      setRevealed(true);
+    }
+
+    function hideNavigation() {
+      if (window.scrollY < window.innerHeight * 0.55) setRevealed(false);
+    }
+
+    function handleScroll() {
+      const currentScroll = window.scrollY;
+      const delta = currentScroll - previousScrollRef.current;
+
+      if (Math.abs(delta) > 8) setDirection(delta > 0 ? "down" : "up");
+      if (currentScroll > window.innerHeight * 0.72) setRevealed(true);
+      if (currentScroll < window.innerHeight * 0.42) setRevealed(false);
+
+      previousScrollRef.current = currentScroll;
+    }
+
+    window.addEventListener("visr:opening-revealed", revealNavigation);
+    window.addEventListener("visr:opening-hidden", hideNavigation);
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    handleScroll();
+
+    return () => {
+      window.removeEventListener("visr:opening-revealed", revealNavigation);
+      window.removeEventListener("visr:opening-hidden", hideNavigation);
+      window.removeEventListener("scroll", handleScroll);
+    };
+  }, []);
+
+  const visible = revealed && direction !== "down";
+
   return (
-    <header className="fixed inset-x-0 top-0 z-50 border-b border-white/[0.06] bg-black/25 backdrop-blur-md">
-      <nav className="visr-container flex h-16 items-center justify-between" aria-label="Primary navigation">
-        <a href="#opening" className="text-sm font-medium tracking-[0.16em]">VISR</a>
-        <div className="hidden items-center gap-7 text-xs text-white/60 md:flex">
-          {items.slice(1).map((item) => (
-            <a key={item} href={`#${item.toLowerCase().replace(" collection", "").replace(" ", "-")}`} className="transition-colors hover:text-white">
-              {item}
+    <header className="site-navigation" data-visible={visible ? "true" : "false"}>
+      <nav className="visr-container site-navigation__inner" aria-label="Primary navigation">
+        <a href="#opening" className="site-navigation__logo" aria-label="VISR home">
+          VISR
+        </a>
+
+        <div className="site-navigation__links">
+          {items.map((item) => (
+            <a key={item.href} href={item.href}>
+              {item.label}
             </a>
           ))}
         </div>
-        <a href="#configure" className="text-xs font-medium text-white/80 transition-colors hover:text-white">
+
+        <a href="#configure" className="site-navigation__action">
           Explore
         </a>
       </nav>

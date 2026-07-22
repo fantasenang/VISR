@@ -10,13 +10,16 @@
 - Vercel Analytics and Speed Insights
 - Experience Bible stored in source control
 
-## Milestone 1 — Opening and Reveal
+## Milestone 1 — Opening and Reveal — COMPLETE
 
-- production opening director
-- adaptive poster/video system
-- acrylic edge-light reveal
-- first-visit and returning-visit behavior
-- skip intro and reduced-motion fallback
+- [x] production opening director
+- [x] adaptive SVG media foundation
+- [x] acrylic edge-light reveal
+- [x] first-visit and returning-visit behavior
+- [x] sound opt-in and mechanical click
+- [x] skip intro and reduced-motion fallback
+- [x] mobile condensed choreography
+- [x] reveal-aware navigation
 
 ## Milestone 2 — Presentation and Engineering
 

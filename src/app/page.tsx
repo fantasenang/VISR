@@ -14,7 +14,7 @@ export default function HomePage() {
           <div className="md:col-span-8 md:col-start-5">
             <h2 className="visr-display">The collection is always the hero.</h2>
             <p className="visr-copy mt-9">
-              This repository is the production foundation for the VISR Digital Exhibition. Real product photography, cinematic video, engineering media, Halo material states, and commerce will enter through controlled milestones—without compromising the core experience.
+              VISR is a display system created around the collection—not the frame. Light reveals the material, precision protects the object, and every interaction returns attention to what matters.
             </p>
           </div>
         </div>
@@ -47,18 +47,30 @@ export default function HomePage() {
         </div>
       </section>
 
+      <section id="exhibition" className="border-t border-white/[0.07] py-32 md:py-52">
+        <div className="visr-container grid gap-12 md:grid-cols-12 md:items-end">
+          <div className="md:col-span-7">
+            <p className="visr-label mb-6 text-white/42">The Exhibition</p>
+            <h2 className="visr-display">Presented with purpose.</h2>
+          </div>
+          <div className="md:col-span-4 md:col-start-9">
+            <p className="visr-copy">Collector environments will enter as editorial stories—never as a generic product grid.</p>
+          </div>
+        </div>
+      </section>
+
       <section id="configure" className="border-t border-white/[0.07] py-32 md:py-52">
         <div className="visr-container text-center">
-          <p className="visr-label mb-7 text-white/42">Foundation Ready</p>
+          <p className="visr-label mb-7 text-white/42">The Invitation</p>
           <h2 className="mx-auto max-w-[11ch] text-[clamp(3rem,7vw,8rem)] font-normal leading-[0.94] tracking-[-0.055em]">Your collection deserves its moment.</h2>
-          <p className="mx-auto mt-8 max-w-xl text-base leading-7 text-white/48">The next development milestone begins with the Opening and Reveal production build.</p>
+          <p className="mx-auto mt-8 max-w-xl text-base leading-7 text-white/48">Presentation begins before ownership. The next reveal will expose the engineering behind the system.</p>
         </div>
       </section>
 
       <footer className="border-t border-white/[0.07] py-8">
         <div className="visr-container flex flex-col gap-4 text-xs text-white/35 md:flex-row md:items-center md:justify-between">
           <span className="tracking-[0.16em]">VISR</span>
-          <span>Digital Exhibition / Foundation 0.1.0</span>
+          <span>Digital Exhibition / Opening & Reveal</span>
         </div>
       </footer>
     </main>
