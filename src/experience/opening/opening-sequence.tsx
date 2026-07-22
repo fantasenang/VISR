@@ -70,6 +70,7 @@ export function OpeningSequence() {
     const section = sectionRef.current;
     const stage = stageRef.current;
     if (!section || !stage) return;
+    const stageElement = stage;
 
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const isCompact = window.matchMedia("(max-width: 767px)").matches;
@@ -83,7 +84,7 @@ export function OpeningSequence() {
 
     function publishProgress(progress: number) {
       const value = progress.toFixed(4);
-      stage.style.setProperty("--opening-progress", value);
+      stageElement.style.setProperty("--opening-progress", value);
       document.documentElement.style.setProperty("--opening-progress", value);
     }
 
