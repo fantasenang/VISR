@@ -1,5 +1,5 @@
 import { SiteNavigation } from "@/components/navigation/site-navigation";
-import { HaloCollection } from "@/experience/halo-collection";
+import { HaloCollection } from "@/experience/halo-collection-revised";
 import { OpeningSequence } from "@/experience/opening/opening-sequence";
 import { StoryMap } from "@/experience/story-map/story-map";
 
