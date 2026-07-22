@@ -20,6 +20,9 @@
 - [x] skip intro and reduced-motion fallback
 - [x] mobile condensed choreography
 - [x] reveal-aware navigation
+- [x] Phase 11.1 hybrid autonomous reveal for fast-scroll resilience
+- [x] first scroll accelerates or advances instead of scrubbing individual frames
+- [x] duplicate anchor ID removed
 
 ## Milestone 2 — Presentation and Engineering
 

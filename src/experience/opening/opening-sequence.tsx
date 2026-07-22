@@ -2,11 +2,11 @@
 
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { OpeningArtifact } from "./opening-artifact";
 import { OpeningSoundControl } from "./opening-sound-control";
 
 const INTRO_STORAGE_KEY = "visr-opening-seen";
+const FAST_SCROLL_THRESHOLD = 88;
 
 function playMechanicalClick() {
   const AudioContextClass = window.AudioContext ??
@@ -42,14 +42,22 @@ function playMechanicalClick() {
 export function OpeningSequence() {
   const sectionRef = useRef<HTMLElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
+  const timelineRef = useRef<gsap.core.Timeline | null>(null);
+  const accelerationTweenRef = useRef<gsap.core.Tween | null>(null);
   const soundEnabledRef = useRef(false);
   const clickPlayedRef = useRef(false);
   const revealDispatchedRef = useRef(false);
+  const introFinishedRef = useRef(false);
+  const pendingAdvanceRef = useRef(false);
+  const scrollIntentRef = useRef(0);
+  const touchStartYRef = useRef<number | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [returningVisitor, setReturningVisitor] = useState(false);
+  const [visitorStateReady, setVisitorStateReady] = useState(false);
 
   useEffect(() => {
     setReturningVisitor(window.sessionStorage.getItem(INTRO_STORAGE_KEY) === "true");
+    setVisitorStateReady(true);
   }, []);
 
   useEffect(() => {
@@ -57,124 +65,249 @@ export function OpeningSequence() {
   }, [soundEnabled]);
 
   useEffect(() => {
+    if (!visitorStateReady) return;
+
     const section = sectionRef.current;
     const stage = stageRef.current;
     if (!section || !stage) return;
 
-    gsap.registerPlugin(ScrollTrigger);
-
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const isCompact = window.matchMedia("(max-width: 767px)").matches;
+    let advanceTimer: number | undefined;
+
+    introFinishedRef.current = false;
+    revealDispatchedRef.current = false;
+    clickPlayedRef.current = false;
+    pendingAdvanceRef.current = false;
+    scrollIntentRef.current = 0;
+
+    function publishProgress(progress: number) {
+      const value = progress.toFixed(4);
+      stage.style.setProperty("--opening-progress", value);
+      document.documentElement.style.setProperty("--opening-progress", value);
+    }
+
+    function dispatchReveal() {
+      if (revealDispatchedRef.current) return;
+
+      revealDispatchedRef.current = true;
+      introFinishedRef.current = true;
+      window.sessionStorage.setItem(INTRO_STORAGE_KEY, "true");
+      window.dispatchEvent(new CustomEvent("visr:opening-revealed"));
+    }
+
+    function advanceToContent() {
+      if (!pendingAdvanceRef.current) return;
+
+      advanceTimer = window.setTimeout(() => {
+        document.querySelector("#visr")?.scrollIntoView({
+          behavior: prefersReducedMotion ? "auto" : "smooth",
+          block: "start",
+        });
+      }, prefersReducedMotion ? 0 : 220);
+    }
+
+    function finishOpening() {
+      publishProgress(1);
+      dispatchReveal();
+      advanceToContent();
+    }
 
     const context = gsap.context(() => {
-      if (prefersReducedMotion) {
-        gsap.set("[data-opening-reveal]", { autoAlpha: 1, y: 0 });
-        gsap.set("[data-opening-artifact]", { autoAlpha: 1, scale: 1 });
-        gsap.set("[data-opening-frame]", { autoAlpha: 1 });
-        return;
-      }
-
-      const fullDistance = returningVisitor ? 1.35 : isCompact ? 2.05 : 2.75;
-      section.style.setProperty("--opening-scroll-distance", `${fullDistance * 100}svh`);
-
-      gsap.set("[data-opening-frame]", { autoAlpha: 0.08 });
+      gsap.set("[data-opening-frame]", { autoAlpha: returningVisitor ? 0.2 : 0.12 });
       gsap.set("[data-frame-line]", { strokeDasharray: 1, strokeDashoffset: 1 });
       gsap.set("[data-frame-highlight]", { strokeDasharray: 1, strokeDashoffset: 1, autoAlpha: 0 });
       gsap.set("[data-opening-car]", {
-        autoAlpha: 0.18,
-        scale: returningVisitor ? 1.12 : 1.72,
-        xPercent: returningVisitor ? 0 : 16,
+        autoAlpha: returningVisitor ? 0.48 : 0.34,
+        scale: returningVisitor ? 1.12 : isCompact ? 1.24 : 1.32,
+        xPercent: isCompact ? 0 : 3,
         transformOrigin: "58% 58%",
       });
       gsap.set("[data-car-body-line]", { strokeDasharray: 1, strokeDashoffset: 1 });
-      gsap.set("[data-opening-reflection]", { autoAlpha: 0, xPercent: -12 });
-      gsap.set("[data-opening-copy-primary]", { autoAlpha: 0, y: 34 });
-      gsap.set("[data-opening-copy-secondary]", { autoAlpha: 0, y: 26 });
-      gsap.set("[data-opening-signature]", { autoAlpha: 0, y: 14 });
-      gsap.set("[data-opening-scroll-hint]", { autoAlpha: returningVisitor ? 0 : 1 });
+      gsap.set("[data-opening-reflection]", { autoAlpha: 0.08, xPercent: -8 });
+      gsap.set("[data-opening-copy-primary]", { autoAlpha: 0, y: 28 });
+      gsap.set("[data-opening-copy-secondary]", { autoAlpha: 0, y: 22 });
+      gsap.set("[data-opening-signature]", { autoAlpha: 0, y: 12 });
+      gsap.set("[data-opening-scroll-hint]", { autoAlpha: 0 });
+      publishProgress(returningVisitor ? 0.12 : 0.07);
+
+      if (prefersReducedMotion || window.scrollY > 40) {
+        gsap.set("[data-opening-car]", { autoAlpha: 1, scale: 1.06, xPercent: 0 });
+        gsap.set("[data-opening-frame]", { autoAlpha: 1 });
+        gsap.set("[data-frame-line], [data-frame-highlight], [data-car-body-line]", {
+          strokeDashoffset: 0,
+          autoAlpha: 1,
+        });
+        gsap.set("[data-opening-reflection]", { autoAlpha: 0.64, xPercent: 10 });
+        gsap.set("[data-opening-artifact]", { scale: isCompact ? 0.84 : 0.92, yPercent: isCompact ? -9 : -5 });
+        gsap.set("[data-opening-copy-primary], [data-opening-copy-secondary], [data-opening-signature]", {
+          autoAlpha: 1,
+          y: 0,
+        });
+        finishOpening();
+        return;
+      }
 
       const timeline = gsap.timeline({
-        defaults: { ease: "none" },
-        scrollTrigger: {
-          trigger: section,
-          start: "top top",
-          end: "bottom bottom",
-          scrub: returningVisitor ? 0.35 : 0.65,
-          invalidateOnRefresh: true,
-          onUpdate: ({ progress }) => {
-            stage.style.setProperty("--opening-progress", progress.toFixed(4));
-            document.documentElement.style.setProperty("--opening-progress", progress.toFixed(4));
+        delay: returningVisitor ? 0.03 : 0.09,
+        defaults: { force3D: true },
+        onUpdate: () => {
+          const progress = timeline.progress();
+          publishProgress(progress);
 
-            if (progress > 0.38 && soundEnabledRef.current && !clickPlayedRef.current) {
-              clickPlayedRef.current = true;
-              playMechanicalClick();
-            }
-
-            if (progress > 0.72 && !revealDispatchedRef.current) {
-              revealDispatchedRef.current = true;
-              window.sessionStorage.setItem(INTRO_STORAGE_KEY, "true");
-              window.dispatchEvent(new CustomEvent("visr:opening-revealed"));
-            }
-          },
-          onLeaveBack: () => {
-            clickPlayedRef.current = false;
-            revealDispatchedRef.current = false;
-            window.dispatchEvent(new CustomEvent("visr:opening-hidden"));
-          },
+          if (progress > 0.34 && soundEnabledRef.current && !clickPlayedRef.current) {
+            clickPlayedRef.current = true;
+            playMechanicalClick();
+          }
         },
+        onComplete: finishOpening,
       });
 
+      timelineRef.current = timeline;
+
       timeline
-        .to("[data-opening-scroll-hint]", { autoAlpha: 0, duration: 0.06 }, 0.02)
         .to("[data-opening-car]", {
           autoAlpha: 1,
           scale: 1.06,
           xPercent: 0,
+          duration: 0.62,
+          ease: "power3.out",
+        }, 0)
+        .to("[data-car-body-line]", {
+          strokeDashoffset: 0,
           duration: 0.38,
           ease: "power2.out",
-        }, 0.02)
-        .to("[data-car-body-line]", { strokeDashoffset: 0, duration: 0.24 }, 0.08)
-        .to("[data-opening-reflection]", { autoAlpha: 0.64, xPercent: 10, duration: 0.3 }, 0.12)
-        .to("[data-opening-frame]", { autoAlpha: 1, duration: 0.2 }, 0.29)
-        .to("[data-frame-line]", { strokeDashoffset: 0, duration: 0.3, ease: "power1.inOut" }, 0.3)
+        }, 0.11)
+        .to("[data-opening-reflection]", {
+          autoAlpha: 0.64,
+          xPercent: 10,
+          duration: 0.48,
+          ease: "power2.out",
+        }, 0.14)
+        .to("[data-opening-frame]", {
+          autoAlpha: 1,
+          duration: 0.3,
+          ease: "power2.out",
+        }, 0.3)
+        .to("[data-frame-line]", {
+          strokeDashoffset: 0,
+          duration: 0.56,
+          ease: "power2.inOut",
+        }, 0.34)
         .to("[data-frame-highlight]", {
           strokeDashoffset: 0,
           autoAlpha: 1,
-          duration: 0.22,
-          ease: "power2.out",
-        }, 0.34)
+          duration: 0.4,
+          ease: "power3.out",
+        }, 0.48)
         .to("[data-opening-artifact]", {
           scale: isCompact ? 0.84 : 0.92,
           yPercent: isCompact ? -9 : -5,
-          duration: 0.28,
-          ease: "power2.inOut",
-        }, 0.47)
+          duration: 0.52,
+          ease: "power3.inOut",
+        }, 0.73)
         .to("[data-opening-copy-primary]", {
           autoAlpha: 1,
           y: 0,
-          duration: 0.18,
-          ease: "power2.out",
-        }, 0.56)
+          duration: 0.38,
+          ease: "power3.out",
+        }, 0.91)
         .to("[data-opening-copy-secondary]", {
           autoAlpha: 1,
           y: 0,
-          duration: 0.18,
-          ease: "power2.out",
-        }, 0.65)
+          duration: 0.36,
+          ease: "power3.out",
+        }, 1.03)
         .to("[data-opening-signature]", {
           autoAlpha: 1,
           y: 0,
-          duration: 0.14,
+          duration: 0.3,
           ease: "power2.out",
-        }, 0.75);
+        }, 1.18)
+        .to("[data-opening-scroll-hint]", {
+          autoAlpha: 1,
+          duration: 0.28,
+          ease: "power2.out",
+        }, 1.28);
+
+      if (returningVisitor) timeline.timeScale(1.55);
     }, section);
 
+    function accelerateOpening(amount: number) {
+      const timeline = timelineRef.current;
+      if (!timeline || introFinishedRef.current) return;
+
+      scrollIntentRef.current += amount;
+      if (scrollIntentRef.current >= FAST_SCROLL_THRESHOLD) {
+        pendingAdvanceRef.current = true;
+      }
+
+      if (accelerationTweenRef.current) return;
+
+      timeline.pause();
+      accelerationTweenRef.current = gsap.to(timeline, {
+        progress: 1,
+        duration: returningVisitor ? 0.26 : isCompact ? 0.38 : 0.48,
+        ease: "power3.out",
+        overwrite: true,
+        onComplete: () => {
+          accelerationTweenRef.current = null;
+          finishOpening();
+        },
+      });
+    }
+
+    function handleWheel(event: WheelEvent) {
+      if (introFinishedRef.current || event.deltaY <= 0) return;
+
+      event.preventDefault();
+      accelerateOpening(Math.abs(event.deltaY));
+    }
+
+    function handleTouchStart(event: TouchEvent) {
+      touchStartYRef.current = event.touches[0]?.clientY ?? null;
+    }
+
+    function handleTouchMove(event: TouchEvent) {
+      if (introFinishedRef.current || touchStartYRef.current === null) return;
+
+      const currentY = event.touches[0]?.clientY;
+      if (currentY === undefined) return;
+
+      const upwardDistance = touchStartYRef.current - currentY;
+      if (upwardDistance <= 8) return;
+
+      event.preventDefault();
+      accelerateOpening(upwardDistance);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (introFinishedRef.current || window.scrollY > 40) return;
+      if (!["ArrowDown", "PageDown", " ", "End"].includes(event.key)) return;
+
+      event.preventDefault();
+      pendingAdvanceRef.current = true;
+      accelerateOpening(FAST_SCROLL_THRESHOLD);
+    }
+
+    section.addEventListener("wheel", handleWheel, { passive: false });
+    section.addEventListener("touchstart", handleTouchStart, { passive: true });
+    section.addEventListener("touchmove", handleTouchMove, { passive: false });
+    window.addEventListener("keydown", handleKeyDown);
+
     return () => {
+      section.removeEventListener("wheel", handleWheel);
+      section.removeEventListener("touchstart", handleTouchStart);
+      section.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("keydown", handleKeyDown);
+      if (advanceTimer !== undefined) window.clearTimeout(advanceTimer);
+      accelerationTweenRef.current?.kill();
+      accelerationTweenRef.current = null;
+      timelineRef.current = null;
       context.revert();
-      section.style.removeProperty("--opening-scroll-distance");
       document.documentElement.style.removeProperty("--opening-progress");
     };
-  }, [returningVisitor]);
+  }, [returningVisitor, visitorStateReady]);
 
   function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
     if (event.pointerType === "touch") return;
@@ -201,8 +334,35 @@ export function OpeningSequence() {
   }
 
   function handleSkipIntro() {
+    pendingAdvanceRef.current = true;
     window.sessionStorage.setItem(INTRO_STORAGE_KEY, "true");
-    window.dispatchEvent(new CustomEvent("visr:opening-revealed"));
+
+    const timeline = timelineRef.current;
+    if (timeline) {
+      timeline.pause();
+      accelerationTweenRef.current?.kill();
+      accelerationTweenRef.current = gsap.to(timeline, {
+        progress: 1,
+        duration: 0.22,
+        ease: "power3.out",
+        overwrite: true,
+        onComplete: () => {
+          introFinishedRef.current = true;
+          if (!revealDispatchedRef.current) {
+            revealDispatchedRef.current = true;
+            window.dispatchEvent(new CustomEvent("visr:opening-revealed"));
+          }
+          document.querySelector("#visr")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        },
+      });
+      return;
+    }
+
+    introFinishedRef.current = true;
+    if (!revealDispatchedRef.current) {
+      revealDispatchedRef.current = true;
+      window.dispatchEvent(new CustomEvent("visr:opening-revealed"));
+    }
     document.querySelector("#visr")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
@@ -254,7 +414,7 @@ export function OpeningSequence() {
 
         <div className="opening-stage__scroll" data-opening-scroll-hint aria-hidden="true">
           <span />
-          <p>Scroll to reveal</p>
+          <p>Scroll to continue</p>
         </div>
       </div>
     </section>

@@ -105,22 +105,21 @@ a {
 
 /* Phase 11 — Opening and Reveal */
 .opening-sequence {
-  --opening-scroll-distance: 275svh;
   position: relative;
-  min-height: var(--opening-scroll-distance);
+  min-height: 100svh;
   background: #020202;
 }
 
 .opening-stage {
   --pointer-x: 0;
   --pointer-y: 0;
-  --opening-progress: 0;
-  position: sticky;
-  top: 0;
+  --opening-progress: 0.07;
+  position: relative;
   width: 100%;
   min-height: 100svh;
   overflow: hidden;
   isolation: isolate;
+  contain: paint;
   background:
     radial-gradient(circle at 58% 45%, rgb(255 255 255 / 0.035), transparent 23rem),
     linear-gradient(180deg, #020202 0%, #030303 70%, #050505 100%);
@@ -203,14 +202,23 @@ a {
   width: 100%;
   height: auto;
   overflow: visible;
-  filter:
-    drop-shadow(0 34px 54px rgb(0 0 0 / 0.72))
-    drop-shadow(0 0 34px rgb(255 255 255 / 0.025));
+  filter: drop-shadow(0 30px 46px rgb(0 0 0 / 0.68));
   transform:
     perspective(1500px)
     rotateY(calc(var(--pointer-x) * 1.8deg))
     rotateX(calc(var(--pointer-y) * -1deg));
   transition: transform 850ms var(--ease-product);
+}
+
+
+[data-opening-car],
+[data-opening-frame],
+[data-opening-reflection],
+[data-opening-artifact],
+[data-opening-copy-primary],
+[data-opening-copy-secondary],
+[data-opening-signature] {
+  will-change: transform, opacity;
 }
 
 .opening-stage__copy {
@@ -445,14 +453,6 @@ a {
 }
 
 @media (max-width: 767px) {
-  .opening-sequence {
-    --opening-scroll-distance: 205svh;
-  }
-
-  .opening-sequence[data-returning="true"] {
-    --opening-scroll-distance: 135svh;
-  }
-
   .opening-stage__artifact {
     top: 43%;
     width: 150vw;
@@ -507,14 +507,6 @@ a {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .opening-sequence {
-    min-height: 100svh;
-  }
-
-  .opening-stage {
-    position: relative;
-  }
-
   .opening-artifact,
   .opening-stage__light {
     transform: none !important;

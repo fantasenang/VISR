@@ -9,7 +9,7 @@ const sequences = [
 
 export function StoryMap() {
   return (
-    <section id="exhibition" className="border-t border-white/[0.07] py-28 md:py-40">
+    <section id="reveal-map" className="border-t border-white/[0.07] py-28 md:py-40">
       <div className="visr-container">
         <div className="mb-20 grid gap-8 md:grid-cols-12">
           <p className="visr-label text-white/38 md:col-span-3">Reveal Architecture</p>
