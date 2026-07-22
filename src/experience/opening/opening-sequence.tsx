@@ -73,7 +73,7 @@ export function OpeningSequence() {
 
     function publishProgress(progress: number) {
       const value = progress.toFixed(4);
-      stage.style.setProperty("--opening-progress", value);
+      stageRef.current?.style.setProperty("--opening-progress", value);
       document.documentElement.style.setProperty("--opening-progress", value);
     }
 
