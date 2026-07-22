@@ -47,7 +47,7 @@ export function StoryMap() {
   useEffect(() => {
     gsap.registerPlugin(ScrollTrigger);
 
-    const section = sectionRef.current;
+    const section = sectionRef.current!;
     const stage = stageRef.current;
     if (!section || !stage) return;
 
