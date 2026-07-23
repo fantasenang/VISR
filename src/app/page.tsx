@@ -1,4 +1,5 @@
 import { SiteNavigation } from "@/components/navigation/site-navigation";
+import { CarryExperience } from "@/experience/carry-experience";
 import { HaloCollection } from "@/experience/halo-collection-revised";
 import { OpeningSequence } from "@/experience/opening/opening-sequence";
 import { StoryMap } from "@/experience/story-map/story-map";
@@ -24,17 +25,7 @@ export default function HomePage() {
       <StoryMap />
       <HaloCollection />
 
-      <section id="carry" className="border-t border-white/[0.07] py-32 md:py-52">
-        <div className="visr-container grid gap-12 md:grid-cols-12 md:items-end">
-          <div className="md:col-span-7">
-            <p className="visr-label mb-6 text-white/42">VISR Carry</p>
-            <h2 className="visr-display">Arrive with confidence.</h2>
-          </div>
-          <div className="md:col-span-4 md:col-start-9">
-            <p className="visr-copy">Presentation that moves with you. The full cinematic Carry sequence enters after product assets are approved.</p>
-          </div>
-        </div>
-      </section>
+      <CarryExperience />
 
       <section id="exhibition" className="border-t border-white/[0.07] py-32 md:py-52">
         <div className="visr-container grid gap-12 md:grid-cols-12 md:items-end">
