@@ -87,27 +87,31 @@ export function OpeningSequence() {
     const context = gsap.context(() => {
       gsap.set("[data-opening-artifact]", { autoAlpha: 1 });
       gsap.set("[data-opening-h01]", {
-        autoAlpha: 1,
-        scale: 1.055,
+        autoAlpha: 0,
+        scale: 1.085,
+        filter: "blur(16px)",
         transformOrigin: "50% 54%",
       });
       gsap.set("[data-opening-h02]", {
         autoAlpha: 0,
         scale: 0.965,
+        filter: "blur(0px)",
         transformOrigin: "50% 50%",
       });
       gsap.set("[data-opening-intro-copy]", { autoAlpha: 0, y: 24 });
       gsap.set("[data-opening-reveal-copy]", { autoAlpha: 0, y: 18 });
-      gsap.set("[data-opening-scroll-hint]", { autoAlpha: 1 });
+      gsap.set("[data-opening-scroll-hint]", { autoAlpha: 0 });
+      gsap.set("[data-opening-utility]", { autoAlpha: 0 });
       gsap.set("[data-opening-reflection]", { autoAlpha: 0, xPercent: -16 });
       publishProgress(0);
 
       if (prefersReducedMotion) {
-        gsap.set("[data-opening-h01]", { autoAlpha: 0, scale: 1 });
+        gsap.set("[data-opening-h01]", { autoAlpha: 0, scale: 1, filter: "blur(0px)" });
         gsap.set("[data-opening-h02]", { autoAlpha: 1, scale: 1 });
         gsap.set("[data-opening-intro-copy]", { autoAlpha: 0 });
         gsap.set("[data-opening-reveal-copy]", { autoAlpha: 1, y: 0 });
         gsap.set("[data-opening-scroll-hint]", { autoAlpha: 0 });
+        gsap.set("[data-opening-utility]", { autoAlpha: 1 });
         publishProgress(1);
         dispatchReveal();
         return;
@@ -120,11 +124,11 @@ export function OpeningSequence() {
           const progress = timeline.progress();
           publishProgress(progress);
 
-          if (progress > 0.52 && soundEnabledRef.current && !clickPlayedRef.current) {
+          if (progress > 0.58 && soundEnabledRef.current && !clickPlayedRef.current) {
             clickPlayedRef.current = true;
             playMechanicalClick();
           }
-          if (progress < 0.44) clickPlayedRef.current = false;
+          if (progress < 0.50) clickPlayedRef.current = false;
         },
         onComplete: dispatchReveal,
       });
@@ -132,56 +136,76 @@ export function OpeningSequence() {
       timelineRef.current = timeline;
 
       timeline
+        .to("[data-opening-h01]", {
+          autoAlpha: 0.46,
+          scale: 1.065,
+          filter: "blur(11px)",
+          duration: 0.16,
+          ease: "power2.out",
+        }, 0.03)
+        .to("[data-opening-scroll-hint]", {
+          autoAlpha: 0.58,
+          duration: 0.10,
+          ease: "power2.out",
+        }, 0.05)
+        .to("[data-opening-utility]", {
+          autoAlpha: 1,
+          duration: 0.12,
+          ease: "power2.out",
+        }, 0.07)
+        .to("[data-opening-h01]", {
+          autoAlpha: 0.90,
+          scale: 1.025,
+          filter: "blur(2.4px)",
+          duration: 0.30,
+          ease: "power2.out",
+        }, 0.14)
         .to("[data-opening-scroll-hint]", {
           autoAlpha: 0,
           duration: 0.08,
           ease: "power2.out",
-        }, 0.04)
+        }, 0.20)
         .to("[data-opening-intro-copy]", {
           autoAlpha: 1,
           y: 0,
           duration: 0.18,
           stagger: 0.04,
           ease: "power3.out",
-        }, 0.10)
-        .to("[data-opening-h01]", {
-          scale: 1.015,
-          duration: 0.38,
-          ease: "power2.out",
-        }, 0.08)
+        }, 0.24)
         .to("[data-opening-intro-copy]", {
           autoAlpha: 0,
           y: -12,
           duration: 0.16,
           stagger: 0.02,
           ease: "power2.in",
-        }, 0.40)
+        }, 0.46)
         .to("[data-opening-h01]", {
           autoAlpha: 0,
           scale: 0.985,
+          filter: "blur(5px)",
           duration: 0.30,
           ease: "power2.inOut",
-        }, 0.47)
+        }, 0.53)
         .to("[data-opening-h02]", {
           autoAlpha: 1,
           scale: 1,
           duration: 0.38,
           ease: "power3.out",
-        }, 0.49)
+        }, 0.55)
         .to("[data-opening-reflection]", {
           autoAlpha: 0.42,
           xPercent: 18,
           duration: 0.30,
           ease: "power2.out",
-        }, 0.55)
+        }, 0.61)
         .to("[data-opening-reveal-copy]", {
           autoAlpha: 1,
           y: 0,
           duration: 0.20,
           stagger: 0.05,
           ease: "power3.out",
-        }, 0.78)
-        .to({}, { duration: 0.14 });
+        }, 0.82)
+        .to({}, { duration: 0.16 });
 
     }, section);
 
@@ -327,7 +351,7 @@ export function OpeningSequence() {
           <span className="opening-stage__floor" />
         </div>
 
-        <div className="opening-stage__utility">
+        <div className="opening-stage__utility" data-opening-utility>
           <OpeningSoundControl enabled={soundEnabled} onToggle={handleSoundToggle} />
           <button type="button" className="opening-skip" onClick={handleSkipIntro}>
             Skip intro
