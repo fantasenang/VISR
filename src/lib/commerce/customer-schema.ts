@@ -12,8 +12,8 @@ export const customerInformationSchema = z.object({
   city: z.string().trim().min(2, "Enter the city or regency."),
   postalCode: z.string().trim().regex(/^[0-9]{5}$/, "Enter a valid 5-digit postal code."),
   orderNotes: z.string().trim().max(500, "Order notes cannot exceed 500 characters.").optional(),
-  preorderConsent: z.literal(true, {
-    error: "Confirm that you understand this is a pre-order item.",
+  preorderConsent: z.boolean().refine((value) => value, {
+    message: "Confirm that you understand this is a pre-order item.",
   }),
 });
 
