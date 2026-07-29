@@ -51,7 +51,9 @@ export function CheckoutClient() {
   const [errors, setErrors] = useState<FieldErrors>({});
   const [reservation, setReservation] = useState<ReservationResult | null>(null);
   const [submitError, setSubmitError] = useState("");
+  const [paymentError, setPaymentError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isPaying, setIsPaying] = useState(false);
 
   const selectedHalo = haloVariants.filter((variant) => halo[variant.id]);
   const subtotal = carryQty * products.carry.price + selectedHalo.length * products.halo.price + linkQty * products.additionalLink.price;
@@ -126,6 +128,28 @@ export function CheckoutClient() {
     }
   };
 
+  const payReservation = async () => {
+    if (!reservation || isPaying) return;
+    setIsPaying(true);
+    setPaymentError("");
+
+    try {
+      const response = await fetch("/api/payments/snap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: reservation.orderId }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(typeof payload.error === "string" ? payload.error : "Payment could not be started.");
+      if (typeof payload.redirectUrl !== "string" || !payload.redirectUrl.startsWith("https://")) throw new Error("INVALID_PAYMENT_URL");
+      window.location.assign(payload.redirectUrl);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Payment could not be started.";
+      setPaymentError(message === "PAYMENT_NOT_CONFIGURED" ? "Midtrans Sandbox is not configured yet." : message === "ORDER_EXPIRED" ? "This reservation has expired. Please create a new reservation." : "Payment could not be started. Please try again.");
+      setIsPaying(false);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-black text-white">
       <div className="visr-container py-12 md:py-20">
@@ -183,8 +207,10 @@ export function CheckoutClient() {
               <p className="visr-label text-white/40">Reservation Confirmed</p>
               <p className="mt-6 text-sm text-white/45">Your order number</p>
               <p className="mt-2 break-all text-2xl tracking-[-0.03em] md:text-4xl">{reservation.orderNumber}</p>
-              <p className="mt-8 max-w-xl text-sm leading-7 text-white/55">Your selected stock is held until {new Date(reservation.expiresAt).toLocaleString("en-ID", { dateStyle: "long", timeStyle: "short", timeZone: "Asia/Jakarta" })} WIB. Payment will be enabled after the Midtrans Sandbox connection is complete.</p>
-              <p className="mt-5 text-xs leading-5 text-white/32">Save this order number. It will be used for payment, confirmation, and order tracking.</p>
+              <p className="mt-8 max-w-xl text-sm leading-7 text-white/55">Your selected stock is held until {new Date(reservation.expiresAt).toLocaleString("en-ID", { dateStyle: "long", timeStyle: "short", timeZone: "Asia/Jakarta" })} WIB. Complete payment before this deadline to secure your Batch 2 reservation.</p>
+              {paymentError && <div className="mt-6 rounded-2xl border border-red-400/30 bg-red-400/10 p-5 text-sm leading-6 text-red-200">{paymentError}</div>}
+              <button type="button" onClick={payReservation} disabled={isPaying} className="mt-8 w-full rounded-full bg-white px-6 py-4 text-sm font-medium text-black transition hover:bg-white/85 disabled:cursor-wait disabled:opacity-55">{isPaying ? "Opening secure payment…" : `Pay ${formatRupiah(subtotal)} with Midtrans`}</button>
+              <p className="mt-5 text-xs leading-5 text-white/32">Save this order number. Midtrans will handle the payment securely, while the webhook confirms the final payment status.</p>
             </div>}
           </section>
 
@@ -199,7 +225,7 @@ export function CheckoutClient() {
               <div className="mt-8 border-t border-white/10 pt-6"><div className="flex justify-between text-lg"><span>Subtotal</span><span>{formatRupiah(subtotal)}</span></div><p className="mt-3 text-xs leading-5 text-white/40">Shipping is calculated from the destination and paid by the customer.</p></div>
               <div className="mt-8 rounded-2xl bg-white/[0.05] p-5 text-xs leading-5 text-white/50"><p>{totalWeight.toLocaleString("en-ID")} g estimated product weight</p><p>{packageSize.lengthCm} × {packageSize.widthCm} × {packageSize.heightCm} cm stacked package</p><p>{totalBoxes} box{totalBoxes === 1 ? "" : "es"}</p></div>
               {step === "products" && <button type="button" onClick={continueToInformation} disabled={subtotal === 0} className="mt-7 w-full rounded-full bg-white px-6 py-4 text-sm font-medium text-black transition hover:bg-white/85 disabled:cursor-not-allowed disabled:opacity-30">Continue to Information</button>}
-              <p className="mt-5 text-center text-xs text-white/32">Payment remains pending until Midtrans is connected.</p>
+              <p className="mt-5 text-center text-xs text-white/32">Payments are verified server-side through Midtrans notifications.</p>
             </div>
           </aside>
         </div>
