@@ -1,6 +1,7 @@
 import { SiteNavigation } from "@/components/navigation/site-navigation";
 import { CarryExperience } from "@/experience/carry-experience";
 import { HaloCollection } from "@/experience/halo-collection-revised";
+import { LinkSystem } from "@/experience/link-system/link-system";
 import { OpeningSequence } from "@/experience/opening/opening-sequence";
 import { StoryMap } from "@/experience/story-map/story-map";
 
@@ -9,6 +10,7 @@ export default function HomePage() {
     <main>
       <SiteNavigation />
       <OpeningSequence />
+      <LinkSystem />
 
       <section id="visr" className="py-28 md:py-48">
         <div className="visr-container grid gap-12 md:grid-cols-12">
