@@ -32,7 +32,7 @@ const frames = [
     title: "Held precisely. Displayed effortlessly.",
     detail: "The car stays visually elevated while the Link remains discreet.",
     imageClass: styles.e03,
-    copyClass: styles.copyTop,
+    copyClass: styles.copyE03,
   },
   {
     number: "04",
