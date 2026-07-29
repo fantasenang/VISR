@@ -3,7 +3,6 @@ import { CarryPhase16 } from "@/experience/carry-phase-16/carry-phase-16";
 import { HaloCollection } from "@/experience/halo-collection-revised";
 import { LinkSystem } from "@/experience/link-system/link-system";
 import { OpeningSequence } from "@/experience/opening/opening-sequence";
-import { StoryMap } from "@/experience/story-map/story-map";
 
 export default function HomePage() {
   return (
@@ -24,7 +23,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      <StoryMap />
       <HaloCollection />
 
       <CarryPhase16 />
