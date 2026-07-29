@@ -86,16 +86,16 @@ export function OpeningSequence() {
 
     const context = gsap.context(() => {
       gsap.set("[data-opening-artifact]", { autoAlpha: 1, scale: 1, yPercent: 0 });
-      gsap.set("[data-opening-frame]", { autoAlpha: 0 });
-      gsap.set("[data-frame-line]", { strokeDasharray: 1, strokeDashoffset: 1 });
-      gsap.set("[data-frame-highlight]", { strokeDasharray: 1, strokeDashoffset: 1, autoAlpha: 0 });
-      gsap.set("[data-opening-car]", {
-        autoAlpha: 0,
-        scale: isCompact ? 1.82 : 2.05,
-        xPercent: isCompact ? 5 : 18,
-        transformOrigin: "58% 58%",
+      gsap.set("[data-opening-h01]", {
+        autoAlpha: 1,
+        scale: 1.035,
+        transformOrigin: "50% 43%",
       });
-      gsap.set("[data-car-body-line]", { strokeDasharray: 1, strokeDashoffset: 1 });
+      gsap.set("[data-opening-h02]", {
+        autoAlpha: 0,
+        scale: 1.045,
+        transformOrigin: "50% 43%",
+      });
       gsap.set("[data-opening-reflection]", { autoAlpha: 0, xPercent: -14 });
       gsap.set("[data-opening-copy-primary]", { autoAlpha: 0, y: 34 });
       gsap.set("[data-opening-copy-secondary]", { autoAlpha: 0, y: 26 });
@@ -104,17 +104,13 @@ export function OpeningSequence() {
       publishProgress(0);
 
       if (prefersReducedMotion) {
-        gsap.set("[data-opening-car]", { autoAlpha: 1, scale: 1.06, xPercent: 0 });
-        gsap.set("[data-opening-frame]", { autoAlpha: 1 });
-        gsap.set("[data-frame-line], [data-frame-highlight], [data-car-body-line]", {
-          strokeDashoffset: 0,
-          autoAlpha: 1,
-        });
+        gsap.set("[data-opening-h01]", { autoAlpha: 0, scale: 1 });
+        gsap.set("[data-opening-h02]", { autoAlpha: 1, scale: 1 });
         gsap.set("[data-opening-reflection]", { autoAlpha: 0.64, xPercent: 10 });
         gsap.set("[data-opening-artifact]", {
           autoAlpha: 1,
-          scale: isCompact ? 0.84 : 0.92,
-          yPercent: isCompact ? -9 : -5,
+          scale: 1,
+          yPercent: 0,
         });
         gsap.set("[data-opening-copy-primary], [data-opening-copy-secondary], [data-opening-signature]", {
           autoAlpha: 1,
@@ -128,7 +124,6 @@ export function OpeningSequence() {
 
       const timeline = gsap.timeline({
         paused: true,
-        defaults: { force3D: true },
         onUpdate: () => {
           const progress = timeline.progress();
           publishProgress(progress);
@@ -153,46 +148,29 @@ export function OpeningSequence() {
           duration: 0.08,
           ease: "power2.out",
         }, 0.1)
-        .to("[data-opening-car]", {
-          autoAlpha: 1,
-          scale: 1.06,
-          xPercent: 0,
-          duration: 0.38,
-          ease: "power3.out",
-        }, 0.16)
-        .to("[data-car-body-line]", {
-          strokeDashoffset: 0,
-          duration: 0.26,
+        .to("[data-opening-h01]", {
+          scale: 1,
+          duration: 0.48,
           ease: "power2.out",
-        }, 0.28)
+        }, 0.12)
         .to("[data-opening-reflection]", {
           autoAlpha: 0.64,
           xPercent: 10,
           duration: 0.32,
           ease: "power2.out",
-        }, 0.32)
-        .to("[data-opening-frame]", {
+        }, 0.24)
+        .to("[data-opening-h02]", {
           autoAlpha: 1,
-          duration: 0.24,
-          ease: "power2.out",
-        }, 0.48)
-        .to("[data-frame-line]", {
-          strokeDashoffset: 0,
-          duration: 0.34,
+          scale: 1,
+          duration: 0.38,
           ease: "power2.inOut",
-        }, 0.5)
-        .to("[data-frame-highlight]", {
-          strokeDashoffset: 0,
-          autoAlpha: 1,
-          duration: 0.28,
-          ease: "power3.out",
-        }, 0.57)
-        .to("[data-opening-artifact]", {
-          scale: isCompact ? 0.84 : 0.92,
-          yPercent: isCompact ? -9 : -5,
-          duration: 0.3,
-          ease: "power3.inOut",
-        }, 0.66)
+        }, 0.4)
+        .to("[data-opening-h01]", {
+          autoAlpha: 0,
+          scale: 0.985,
+          duration: 0.32,
+          ease: "power2.inOut",
+        }, 0.48)
         .to("[data-opening-copy-primary]", {
           autoAlpha: 1,
           y: 0,
