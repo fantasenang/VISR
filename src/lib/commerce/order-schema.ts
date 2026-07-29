@@ -1,11 +1,11 @@
 import { z } from "zod";
 import { haloVariants, products } from "@/lib/commerce/catalog";
 
-const allowedSkus = [
+const allowedSkus = new Set<string>([
   products.carry.sku,
   products.additionalLink.sku,
   ...haloVariants.map((variant) => variant.sku),
-] as const;
+]);
 
 const quantityLimits = new Map<string, number>([
   [products.carry.sku, products.carry.maxPerOrder],
@@ -29,7 +29,7 @@ export const customerSchema = z.object({
 });
 
 export const reservationItemSchema = z.object({
-  sku: z.enum(allowedSkus),
+  sku: z.string().refine((value) => allowedSkus.has(value), "Unknown VISR SKU"),
   quantity: z.number().int().positive(),
 });
 
