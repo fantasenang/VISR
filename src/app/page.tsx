@@ -1,5 +1,5 @@
 import { SiteNavigation } from "@/components/navigation/site-navigation";
-import { CarryExperience } from "@/experience/carry-experience";
+import { CarryPhase16 } from "@/experience/carry-phase-16/carry-phase-16";
 import { HaloCollection } from "@/experience/halo-collection-revised";
 import { LinkSystem } from "@/experience/link-system/link-system";
 import { OpeningSequence } from "@/experience/opening/opening-sequence";
@@ -27,7 +27,7 @@ export default function HomePage() {
       <StoryMap />
       <HaloCollection />
 
-      <CarryExperience />
+      <CarryPhase16 />
 
       <section id="exhibition" className="border-t border-white/[0.07] py-32 md:py-52">
         <div className="visr-container grid gap-12 md:grid-cols-12 md:items-end">
@@ -52,7 +52,7 @@ export default function HomePage() {
       <footer className="border-t border-white/[0.07] py-8">
         <div className="visr-container flex flex-col gap-4 text-xs text-white/35 md:flex-row md:items-center md:justify-between">
           <span className="tracking-[0.16em]">VISR</span>
-          <span>Digital Exhibition / Opening, Engineering & Halo</span>
+          <span>Digital Exhibition / Opening, Engineering, Halo & Carry</span>
         </div>
       </footer>
     </main>
