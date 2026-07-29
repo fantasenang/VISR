@@ -5,9 +5,9 @@ import gsap from "gsap";
 import { OpeningArtifact } from "./opening-artifact";
 import { OpeningSoundControl } from "./opening-sound-control";
 
-const WHEEL_DISTANCE_DESKTOP = 920;
-const WHEEL_DISTANCE_MOBILE = 620;
-const KEYBOARD_STEP = 0.2;
+const WHEEL_DISTANCE_DESKTOP = 760;
+const WHEEL_DISTANCE_MOBILE = 430;
+const KEYBOARD_STEP = 0.22;
 
 function playMechanicalClick() {
   const AudioContextClass = window.AudioContext ??
@@ -85,37 +85,28 @@ export function OpeningSequence() {
     }
 
     const context = gsap.context(() => {
-      gsap.set("[data-opening-artifact]", { autoAlpha: 1, scale: 1, yPercent: 0 });
+      gsap.set("[data-opening-artifact]", { autoAlpha: 1 });
       gsap.set("[data-opening-h01]", {
         autoAlpha: 1,
-        scale: 1.035,
-        transformOrigin: "50% 43%",
+        scale: 1.055,
+        transformOrigin: "50% 54%",
       });
       gsap.set("[data-opening-h02]", {
         autoAlpha: 0,
-        scale: 1.045,
-        transformOrigin: "50% 43%",
+        scale: 0.965,
+        transformOrigin: "50% 50%",
       });
-      gsap.set("[data-opening-reflection]", { autoAlpha: 0, xPercent: -14 });
-      gsap.set("[data-opening-copy-primary]", { autoAlpha: 0, y: 34 });
-      gsap.set("[data-opening-copy-secondary]", { autoAlpha: 0, y: 26 });
-      gsap.set("[data-opening-signature]", { autoAlpha: 0, y: 14 });
+      gsap.set("[data-opening-intro-copy]", { autoAlpha: 0, y: 24 });
+      gsap.set("[data-opening-reveal-copy]", { autoAlpha: 0, y: 18 });
       gsap.set("[data-opening-scroll-hint]", { autoAlpha: 1 });
+      gsap.set("[data-opening-reflection]", { autoAlpha: 0, xPercent: -16 });
       publishProgress(0);
 
       if (prefersReducedMotion) {
         gsap.set("[data-opening-h01]", { autoAlpha: 0, scale: 1 });
         gsap.set("[data-opening-h02]", { autoAlpha: 1, scale: 1 });
-        gsap.set("[data-opening-reflection]", { autoAlpha: 0.64, xPercent: 10 });
-        gsap.set("[data-opening-artifact]", {
-          autoAlpha: 1,
-          scale: 1,
-          yPercent: 0,
-        });
-        gsap.set("[data-opening-copy-primary], [data-opening-copy-secondary], [data-opening-signature]", {
-          autoAlpha: 1,
-          y: 0,
-        });
+        gsap.set("[data-opening-intro-copy]", { autoAlpha: 0 });
+        gsap.set("[data-opening-reveal-copy]", { autoAlpha: 1, y: 0 });
         gsap.set("[data-opening-scroll-hint]", { autoAlpha: 0 });
         publishProgress(1);
         dispatchReveal();
@@ -124,16 +115,16 @@ export function OpeningSequence() {
 
       const timeline = gsap.timeline({
         paused: true,
+        defaults: { force3D: true },
         onUpdate: () => {
           const progress = timeline.progress();
           publishProgress(progress);
 
-          if (progress > 0.43 && soundEnabledRef.current && !clickPlayedRef.current) {
+          if (progress > 0.52 && soundEnabledRef.current && !clickPlayedRef.current) {
             clickPlayedRef.current = true;
             playMechanicalClick();
           }
-
-          if (progress < 0.36) clickPlayedRef.current = false;
+          if (progress < 0.44) clickPlayedRef.current = false;
         },
         onComplete: dispatchReveal,
       });
@@ -141,54 +132,57 @@ export function OpeningSequence() {
       timelineRef.current = timeline;
 
       timeline
-        // A deliberate dead zone: nothing reveals on page load or accidental micro-scroll.
-        .to({}, { duration: 0.12 })
         .to("[data-opening-scroll-hint]", {
           autoAlpha: 0,
           duration: 0.08,
           ease: "power2.out",
-        }, 0.1)
+        }, 0.04)
+        .to("[data-opening-intro-copy]", {
+          autoAlpha: 1,
+          y: 0,
+          duration: 0.18,
+          stagger: 0.04,
+          ease: "power3.out",
+        }, 0.10)
         .to("[data-opening-h01]", {
-          scale: 1,
-          duration: 0.48,
+          scale: 1.015,
+          duration: 0.38,
           ease: "power2.out",
-        }, 0.12)
-        .to("[data-opening-reflection]", {
-          autoAlpha: 0.64,
-          xPercent: 10,
-          duration: 0.32,
-          ease: "power2.out",
-        }, 0.24)
+        }, 0.08)
+        .to("[data-opening-intro-copy]", {
+          autoAlpha: 0,
+          y: -12,
+          duration: 0.16,
+          stagger: 0.02,
+          ease: "power2.in",
+        }, 0.40)
+        .to("[data-opening-h01]", {
+          autoAlpha: 0,
+          scale: 0.985,
+          duration: 0.30,
+          ease: "power2.inOut",
+        }, 0.47)
         .to("[data-opening-h02]", {
           autoAlpha: 1,
           scale: 1,
           duration: 0.38,
-          ease: "power2.inOut",
-        }, 0.4)
-        .to("[data-opening-h01]", {
-          autoAlpha: 0,
-          scale: 0.985,
-          duration: 0.32,
-          ease: "power2.inOut",
-        }, 0.48)
-        .to("[data-opening-copy-primary]", {
+          ease: "power3.out",
+        }, 0.49)
+        .to("[data-opening-reflection]", {
+          autoAlpha: 0.42,
+          xPercent: 18,
+          duration: 0.30,
+          ease: "power2.out",
+        }, 0.55)
+        .to("[data-opening-reveal-copy]", {
           autoAlpha: 1,
           y: 0,
-          duration: 0.22,
+          duration: 0.20,
+          stagger: 0.05,
           ease: "power3.out",
         }, 0.78)
-        .to("[data-opening-copy-secondary]", {
-          autoAlpha: 1,
-          y: 0,
-          duration: 0.2,
-          ease: "power3.out",
-        }, 0.86)
-        .to("[data-opening-signature]", {
-          autoAlpha: 1,
-          y: 0,
-          duration: 0.16,
-          ease: "power2.out",
-        }, 0.94);
+        .to({}, { duration: 0.14 });
+
     }, section);
 
     function moveTimeline(deltaProgress: number) {
@@ -199,7 +193,7 @@ export function OpeningSequence() {
       progressTweenRef.current?.kill();
       progressTweenRef.current = gsap.to(timeline, {
         progress: targetProgressRef.current,
-        duration: isCompact ? 0.36 : 0.48,
+        duration: isCompact ? 0.24 : 0.38,
         ease: "power2.out",
         overwrite: true,
         onComplete: () => {
@@ -212,7 +206,7 @@ export function OpeningSequence() {
     function handleWheel(event: WheelEvent) {
       if (introFinishedRef.current || event.deltaY <= 0) return;
       event.preventDefault();
-      moveTimeline(Math.min(0.18, Math.abs(event.deltaY) / interactionDistance));
+      moveTimeline(Math.min(0.24, Math.abs(event.deltaY) / interactionDistance));
     }
 
     function handleTouchStart(event: TouchEvent) {
@@ -230,7 +224,7 @@ export function OpeningSequence() {
       if (upwardDistance <= 0) return;
 
       event.preventDefault();
-      moveTimeline(Math.min(0.14, upwardDistance / interactionDistance));
+      moveTimeline(Math.min(0.22, upwardDistance / interactionDistance));
     }
 
     function handleTouchEnd() {
@@ -344,23 +338,21 @@ export function OpeningSequence() {
           <OpeningArtifact className="opening-artifact" />
         </div>
 
-        <div className="opening-stage__copy visr-container">
-          <p className="visr-label opening-stage__eyebrow" data-opening-signature style={{ opacity: 0 }}>
-            VISR Display System
-          </p>
-          <h1
-            id="opening-title"
-            className="opening-stage__headline"
-            data-opening-copy-primary
-            style={{ opacity: 0 }}
-          >
-            Designed to disappear.
+        <div className="opening-stage__copy opening-stage__copy--intro visr-container">
+          <h1 id="opening-title" className="opening-stage__headline" data-opening-intro-copy style={{ opacity: 0 }}>
+            Designed to Carry.
           </h1>
-          <p className="opening-stage__subheadline" data-opening-copy-secondary style={{ opacity: 0 }}>
-            Engineered to elevate.
+          <p className="opening-stage__subheadline" data-opening-intro-copy style={{ opacity: 0 }}>
+            Engineered to Display.
           </p>
-          <p className="opening-stage__signature" data-opening-signature style={{ opacity: 0 }}>
-            The collection is always the hero.
+        </div>
+
+        <div className="opening-stage__copy opening-stage__copy--reveal visr-container">
+          <p className="visr-label opening-stage__eyebrow" data-opening-reveal-copy style={{ opacity: 0 }}>
+            VISR Carry
+          </p>
+          <p className="opening-stage__reveal-line" data-opening-reveal-copy style={{ opacity: 0 }}>
+            The first magnetic diecast display system.
           </p>
         </div>
 
