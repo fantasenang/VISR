@@ -33,8 +33,9 @@ export default function HomePage() {
           <p className="mx-auto mt-8 max-w-xl text-base leading-7 text-white/48">
             <span className="block">VISR Carry Batch 2.</span>
             <span className="block">Pre-order price Rp179.000 — website only.</span>
-            <span className="block">Pre-order opens soon</span>
+            <span className="block">100 units available.</span>
           </p>
+          <a href="/checkout" className="mt-10 inline-flex rounded-full bg-white px-8 py-4 text-sm font-medium text-black transition hover:bg-white/85">Reserve Your VISR</a>
         </div>
       </section>
 
