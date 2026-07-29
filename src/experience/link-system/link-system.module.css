@@ -113,6 +113,17 @@
   top: max(7.5rem, 15svh);
 }
 
+.copyE03 {
+  top: max(7.5rem, 15svh);
+}
+
+.copyE03 .detail {
+  position: absolute;
+  top: calc(100svh - max(7.5rem, 15svh) - 8.5rem);
+  right: 0;
+  left: 0;
+}
+
 .copyUpperRight {
   top: max(6.5rem, 12svh);
   left: auto;
