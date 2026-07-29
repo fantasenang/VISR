@@ -1,30 +1,25 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
+import { reservationSchema } from "@/lib/commerce/order-schema";
 
-const customerSchema = z.object({
-  fullName: z.string().trim().min(3).max(100),
-  whatsapp: z.string().regex(/^62\d{8,13}$/),
-  email: z.string().email(),
-  address: z.string().trim().min(10).max(500),
-  province: z.string().trim().min(2).max(100),
-  city: z.string().trim().min(2).max(100),
-  postalCode: z.string().regex(/^\d{5}$/),
-  notes: z.string().trim().max(500).optional().default(""),
-});
-
-const requestSchema = z.object({
-  customer: customerSchema,
-  items: z.array(z.object({ sku: z.string().min(1), quantity: z.number().int().positive() })).min(1).max(8),
-});
+type ReservationResult = {
+  order_id: string;
+  order_number: string;
+  expires_at: string;
+};
 
 export async function POST(request: Request) {
-  const parsed = requestSchema.safeParse(await request.json().catch(() => null));
+  const parsed = reservationSchema.safeParse(await request.json().catch(() => null));
+
   if (!parsed.success) {
-    return NextResponse.json({ error: "INVALID_ORDER", details: parsed.error.flatten() }, { status: 400 });
+    return NextResponse.json(
+      { error: "INVALID_ORDER", details: parsed.error.flatten() },
+      { status: 400 },
+    );
   }
 
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
   if (!supabaseUrl || !serviceRoleKey) {
     return NextResponse.json({ error: "COMMERCE_NOT_CONFIGURED" }, { status: 503 });
   }
@@ -36,16 +31,35 @@ export async function POST(request: Request) {
       Authorization: `Bearer ${serviceRoleKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ customer: parsed.data.customer, requested_items: parsed.data.items }),
+    body: JSON.stringify({
+      customer: parsed.data.customer,
+      requested_items: parsed.data.items,
+    }),
     cache: "no-store",
   });
 
   if (!response.ok) {
     const failure = await response.json().catch(() => ({}));
     const message = typeof failure.message === "string" ? failure.message : "ORDER_CREATION_FAILED";
-    const status = message.includes("OUT_OF_STOCK") ? 409 : 500;
+    const normalized = message.toUpperCase();
+    const status = normalized.includes("STOCK") ? 409 : normalized.includes("LIMIT") ? 400 : 500;
+
     return NextResponse.json({ error: message }, { status });
   }
 
-  return NextResponse.json(await response.json(), { status: 201 });
+  const payload = (await response.json()) as ReservationResult[] | ReservationResult;
+  const reservation = Array.isArray(payload) ? payload[0] : payload;
+
+  if (!reservation?.order_number) {
+    return NextResponse.json({ error: "INVALID_RESERVATION_RESPONSE" }, { status: 502 });
+  }
+
+  return NextResponse.json(
+    {
+      orderId: reservation.order_id,
+      orderNumber: reservation.order_number,
+      expiresAt: reservation.expires_at,
+    },
+    { status: 201 },
+  );
 }
