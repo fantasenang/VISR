@@ -23,8 +23,6 @@
   position: absolute;
   width: 100%;
   height: 100%;
-  object-fit: contain;
-  object-position: 50% 43%;
   user-select: none;
   -webkit-user-drag: none;
   will-change: transform, opacity;
@@ -32,10 +30,16 @@
 
 .photoH01 {
   z-index: 0;
+  object-fit: cover;
+  object-position: 50% 47%;
 }
 
 .photoH02 {
   z-index: 1;
+  box-sizing: border-box;
+  padding: max(1.5rem, 4svh) 0 max(4rem, 9svh);
+  object-fit: contain;
+  object-position: center;
 }
 
 .reflection {
