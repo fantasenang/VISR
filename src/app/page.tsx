@@ -23,9 +23,8 @@ export default function HomePage() {
         </div>
       </section>
 
-      <HaloCollection />
-
       <CarryPhase16 />
+      <HaloCollection />
 
       <section id="exhibition" className="border-t border-white/[0.07] py-32 md:py-52">
         <div className="visr-container grid gap-12 md:grid-cols-12 md:items-end">
