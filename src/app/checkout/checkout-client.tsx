@@ -5,8 +5,9 @@ import { calculateStackedPackage, formatRupiah, haloVariants, products } from "@
 import { CustomerInformation, customerInformationSchema, normalizeWhatsApp } from "@/lib/commerce/customer-schema";
 
 type HaloSelection = Record<string, boolean>;
-type CheckoutStep = "products" | "information" | "review";
+type CheckoutStep = "products" | "information" | "review" | "reserved";
 type FieldErrors = Partial<Record<keyof CustomerInformation, string>>;
+type ReservationResult = { orderId: string; orderNumber: string; expiresAt: string };
 
 const emptyCustomer: CustomerInformation = {
   fullName: "",
@@ -48,12 +49,21 @@ export function CheckoutClient() {
   const [halo, setHalo] = useState<HaloSelection>({});
   const [customer, setCustomer] = useState<CustomerInformation>(emptyCustomer);
   const [errors, setErrors] = useState<FieldErrors>({});
+  const [reservation, setReservation] = useState<ReservationResult | null>(null);
+  const [submitError, setSubmitError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const selectedHalo = haloVariants.filter((variant) => halo[variant.id]);
   const subtotal = carryQty * products.carry.price + selectedHalo.length * products.halo.price + linkQty * products.additionalLink.price;
   const totalWeight = carryQty * products.carry.weightGrams + selectedHalo.length * products.halo.weightGrams + linkQty * products.additionalLink.weightGrams;
   const totalBoxes = carryQty + selectedHalo.length + linkQty;
   const packageSize = useMemo(() => calculateStackedPackage(totalBoxes), [totalBoxes]);
+
+  const items = useMemo(() => [
+    ...(carryQty > 0 ? [{ sku: products.carry.sku, quantity: carryQty }] : []),
+    ...selectedHalo.map((variant) => ({ sku: variant.sku, quantity: 1 })),
+    ...(linkQty > 0 ? [{ sku: products.additionalLink.sku, quantity: linkQty }] : []),
+  ], [carryQty, linkQty, selectedHalo]);
 
   const updateCustomer = (name: keyof CustomerInformation, value: string | boolean) => {
     setCustomer((current) => ({ ...current, [name]: value }));
@@ -78,21 +88,60 @@ export function CheckoutClient() {
     setStep("review");
   };
 
+  const createReservation = async () => {
+    if (isSubmitting || items.length === 0) return;
+    setIsSubmitting(true);
+    setSubmitError("");
+
+    try {
+      const response = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customer: {
+            fullName: customer.fullName,
+            whatsapp: normalizeWhatsApp(customer.whatsapp),
+            email: customer.email,
+            address: customer.address,
+            province: customer.province,
+            city: customer.city,
+            postalCode: customer.postalCode,
+            notes: customer.orderNotes ?? "",
+            preorderConsent: true,
+          },
+          items,
+        }),
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(typeof payload.error === "string" ? payload.error : "Reservation could not be created.");
+
+      setReservation(payload as ReservationResult);
+      setStep("reserved");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Reservation could not be created.";
+      setSubmitError(message.includes("stock") || message.includes("Stock") ? "One of your selected items is no longer available in that quantity. Please edit your reservation." : message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-black text-white">
       <div className="visr-container py-12 md:py-20">
         <a href="/" className="visr-label text-white/45">← Back to exhibition</a>
-        <div className="mt-10 flex gap-3 text-[11px] uppercase tracking-[0.18em] text-white/35">
+        <div className="mt-10 flex flex-wrap gap-3 text-[11px] uppercase tracking-[0.18em] text-white/35">
           <span className={step === "products" ? "text-white" : ""}>01 Products</span><span>—</span>
           <span className={step === "information" ? "text-white" : ""}>02 Information</span><span>—</span>
-          <span className={step === "review" ? "text-white" : ""}>03 Review</span>
+          <span className={step === "review" ? "text-white" : ""}>03 Review</span><span>—</span>
+          <span className={step === "reserved" ? "text-white" : ""}>04 Reserved</span>
         </div>
 
         <div className="mt-12 grid gap-14 lg:grid-cols-[1.15fr_0.85fr]">
           <section>
             <p className="visr-label text-white/42">Reserve Your VISR</p>
-            <h1 className="mt-5 max-w-[10ch] text-[clamp(3.5rem,8vw,7.5rem)] font-normal leading-[0.9] tracking-[-0.06em]">
-              {step === "products" ? "Build your Batch 2 reservation." : step === "information" ? "Where should your VISR go?" : "Review your reservation."}
+            <h1 className="mt-5 max-w-[11ch] text-[clamp(3.5rem,8vw,7.5rem)] font-normal leading-[0.9] tracking-[-0.06em]">
+              {step === "products" ? "Build your Batch 2 reservation." : step === "information" ? "Where should your VISR go?" : step === "review" ? "Review your reservation." : "Welcome to Batch 2."}
             </h1>
 
             {step === "products" && <div className="mt-16 border-t border-white/10">
@@ -126,7 +175,16 @@ export function CheckoutClient() {
 
             {step === "review" && <div className="mt-14 space-y-8">
               <div className="rounded-[2rem] border border-white/10 p-7"><p className="visr-label text-white/40">Customer</p><p className="mt-5 text-xl">{customer.fullName}</p><p className="mt-2 text-sm leading-6 text-white/50">+{customer.whatsapp}<br />{customer.email}<br />{customer.address}, {customer.city}, {customer.province} {customer.postalCode}</p>{customer.orderNotes && <p className="mt-4 text-sm text-white/40">Note: {customer.orderNotes}</p>}</div>
-              <div className="flex gap-3"><button type="button" onClick={() => setStep("information")} className="rounded-full border border-white/15 px-6 py-4 text-sm">Edit Information</button><button type="button" disabled className="flex-1 rounded-full bg-white px-6 py-4 text-sm font-medium text-black opacity-45">Create Reservation — Midtrans pending</button></div>
+              {submitError && <div className="rounded-2xl border border-red-400/30 bg-red-400/10 p-5 text-sm leading-6 text-red-200">{submitError}</div>}
+              <div className="flex gap-3"><button type="button" onClick={() => setStep("information")} disabled={isSubmitting} className="rounded-full border border-white/15 px-6 py-4 text-sm disabled:opacity-40">Edit Information</button><button type="button" onClick={createReservation} disabled={isSubmitting} className="flex-1 rounded-full bg-white px-6 py-4 text-sm font-medium text-black disabled:cursor-wait disabled:opacity-55">{isSubmitting ? "Reserving stock…" : "Create Reservation"}</button></div>
+            </div>}
+
+            {step === "reserved" && reservation && <div className="mt-14 rounded-[2rem] border border-white/12 bg-white/[0.035] p-7 md:p-10">
+              <p className="visr-label text-white/40">Reservation Confirmed</p>
+              <p className="mt-6 text-sm text-white/45">Your order number</p>
+              <p className="mt-2 break-all text-2xl tracking-[-0.03em] md:text-4xl">{reservation.orderNumber}</p>
+              <p className="mt-8 max-w-xl text-sm leading-7 text-white/55">Your selected stock is held until {new Date(reservation.expiresAt).toLocaleString("en-ID", { dateStyle: "long", timeStyle: "short", timeZone: "Asia/Jakarta" })} WIB. Payment will be enabled after the Midtrans Sandbox connection is complete.</p>
+              <p className="mt-5 text-xs leading-5 text-white/32">Save this order number. It will be used for payment, confirmation, and order tracking.</p>
             </div>}
           </section>
 
@@ -139,9 +197,9 @@ export function CheckoutClient() {
                 {linkQty > 0 && <div className="flex justify-between gap-4"><span>Additional VISR Link × {linkQty}</span><span>{formatRupiah(linkQty * products.additionalLink.price)}</span></div>}
               </div>
               <div className="mt-8 border-t border-white/10 pt-6"><div className="flex justify-between text-lg"><span>Subtotal</span><span>{formatRupiah(subtotal)}</span></div><p className="mt-3 text-xs leading-5 text-white/40">Shipping is calculated from the destination and paid by the customer.</p></div>
-              <div className="mt-8 rounded-2xl bg-white/[0.05] p-5 text-xs leading-5 text-white/50"><p>{totalWeight.toLocaleString("id-ID")} g estimated product weight</p><p>{packageSize.lengthCm} × {packageSize.widthCm} × {packageSize.heightCm} cm stacked package</p><p>{totalBoxes} box{totalBoxes === 1 ? "" : "es"}</p></div>
+              <div className="mt-8 rounded-2xl bg-white/[0.05] p-5 text-xs leading-5 text-white/50"><p>{totalWeight.toLocaleString("en-ID")} g estimated product weight</p><p>{packageSize.lengthCm} × {packageSize.widthCm} × {packageSize.heightCm} cm stacked package</p><p>{totalBoxes} box{totalBoxes === 1 ? "" : "es"}</p></div>
               {step === "products" && <button type="button" onClick={continueToInformation} disabled={subtotal === 0} className="mt-7 w-full rounded-full bg-white px-6 py-4 text-sm font-medium text-black transition hover:bg-white/85 disabled:cursor-not-allowed disabled:opacity-30">Continue to Information</button>}
-              <p className="mt-5 text-center text-xs text-white/32">Midtrans payment will be connected after merchant verification.</p>
+              <p className="mt-5 text-center text-xs text-white/32">Payment remains pending until Midtrans is connected.</p>
             </div>
           </aside>
         </div>
