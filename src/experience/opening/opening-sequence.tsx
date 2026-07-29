@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useRef, type PointerEvent } from "react";
 import gsap from "gsap";
 import { OpeningArtifact } from "./opening-artifact";
-import { OpeningSoundControl } from "./opening-sound-control";
 
 const WHEEL_DISTANCE_DESKTOP = 760;
 const WHEEL_DISTANCE_MOBILE = 430;
 const KEYBOARD_STEP = 0.22;
+const SOUND_TRIGGER_PROGRESS = 0.58;
 
 function playMechanicalClick() {
   const AudioContextClass = window.AudioContext ??
@@ -47,15 +47,9 @@ export function OpeningSequence() {
   const progressTweenRef = useRef<gsap.core.Tween | null>(null);
   const targetProgressRef = useRef(0);
   const touchLastYRef = useRef<number | null>(null);
-  const soundEnabledRef = useRef(false);
   const clickPlayedRef = useRef(false);
   const revealDispatchedRef = useRef(false);
   const introFinishedRef = useRef(false);
-  const [soundEnabled, setSoundEnabled] = useState(false);
-
-  useEffect(() => {
-    soundEnabledRef.current = soundEnabled;
-  }, [soundEnabled]);
 
   useEffect(() => {
     const section = sectionRef.current;
@@ -100,8 +94,7 @@ export function OpeningSequence() {
       });
       gsap.set("[data-opening-intro-copy]", { autoAlpha: 0, y: 24 });
       gsap.set("[data-opening-reveal-copy]", { autoAlpha: 0, y: 18 });
-      gsap.set("[data-opening-scroll-hint]", { autoAlpha: 0 });
-      gsap.set("[data-opening-utility]", { autoAlpha: 0 });
+      gsap.set("[data-opening-scroll-hint]", { autoAlpha: 1 });
       gsap.set("[data-opening-reflection]", { autoAlpha: 0, xPercent: -16 });
       publishProgress(0);
 
@@ -111,7 +104,6 @@ export function OpeningSequence() {
         gsap.set("[data-opening-intro-copy]", { autoAlpha: 0 });
         gsap.set("[data-opening-reveal-copy]", { autoAlpha: 1, y: 0 });
         gsap.set("[data-opening-scroll-hint]", { autoAlpha: 0 });
-        gsap.set("[data-opening-utility]", { autoAlpha: 1 });
         publishProgress(1);
         dispatchReveal();
         return;
@@ -120,16 +112,7 @@ export function OpeningSequence() {
       const timeline = gsap.timeline({
         paused: true,
         defaults: { force3D: true },
-        onUpdate: () => {
-          const progress = timeline.progress();
-          publishProgress(progress);
-
-          if (progress > 0.58 && soundEnabledRef.current && !clickPlayedRef.current) {
-            clickPlayedRef.current = true;
-            playMechanicalClick();
-          }
-          if (progress < 0.50) clickPlayedRef.current = false;
-        },
+        onUpdate: () => publishProgress(timeline.progress()),
         onComplete: dispatchReveal,
       });
 
@@ -143,16 +126,6 @@ export function OpeningSequence() {
           duration: 0.16,
           ease: "power2.out",
         }, 0.03)
-        .to("[data-opening-scroll-hint]", {
-          autoAlpha: 0.58,
-          duration: 0.10,
-          ease: "power2.out",
-        }, 0.05)
-        .to("[data-opening-utility]", {
-          autoAlpha: 1,
-          duration: 0.12,
-          ease: "power2.out",
-        }, 0.07)
         .to("[data-opening-h01]", {
           autoAlpha: 0.90,
           scale: 1.025,
@@ -162,9 +135,9 @@ export function OpeningSequence() {
         }, 0.14)
         .to("[data-opening-scroll-hint]", {
           autoAlpha: 0,
-          duration: 0.08,
+          duration: 0.10,
           ease: "power2.out",
-        }, 0.20)
+        }, 0.22)
         .to("[data-opening-intro-copy]", {
           autoAlpha: 1,
           y: 0,
@@ -206,23 +179,36 @@ export function OpeningSequence() {
           ease: "power3.out",
         }, 0.82)
         .to({}, { duration: 0.16 });
-
     }, section);
 
     function moveTimeline(deltaProgress: number) {
       const timeline = timelineRef.current;
       if (!timeline || introFinishedRef.current) return;
 
-      targetProgressRef.current = Math.min(1, Math.max(0, targetProgressRef.current + deltaProgress));
+      const previousProgress = targetProgressRef.current;
+      const nextProgress = Math.min(1, Math.max(0, previousProgress + deltaProgress));
+      targetProgressRef.current = nextProgress;
+
+      // Triggered directly from the user's scroll/swipe gesture so mobile browsers
+      // permit audio without requiring a visible sound toggle.
+      if (
+        previousProgress < SOUND_TRIGGER_PROGRESS &&
+        nextProgress >= SOUND_TRIGGER_PROGRESS &&
+        !clickPlayedRef.current
+      ) {
+        clickPlayedRef.current = true;
+        playMechanicalClick();
+      }
+
       progressTweenRef.current?.kill();
       progressTweenRef.current = gsap.to(timeline, {
-        progress: targetProgressRef.current,
+        progress: nextProgress,
         duration: isCompact ? 0.24 : 0.38,
         ease: "power2.out",
         overwrite: true,
         onComplete: () => {
           progressTweenRef.current = null;
-          if (targetProgressRef.current >= 1) dispatchReveal();
+          if (nextProgress >= 1) dispatchReveal();
         },
       });
     }
@@ -297,40 +283,6 @@ export function OpeningSequence() {
     event.currentTarget.style.setProperty("--pointer-y", "0");
   }
 
-  function handleSoundToggle() {
-    setSoundEnabled((current) => {
-      const next = !current;
-      if (next) playMechanicalClick();
-      return next;
-    });
-  }
-
-  function handleSkipIntro() {
-    const timeline = timelineRef.current;
-    progressTweenRef.current?.kill();
-
-    if (timeline) {
-      progressTweenRef.current = gsap.to(timeline, {
-        progress: 1,
-        duration: 0.32,
-        ease: "power3.out",
-        overwrite: true,
-        onComplete: () => {
-          introFinishedRef.current = true;
-          if (!revealDispatchedRef.current) {
-            revealDispatchedRef.current = true;
-            window.dispatchEvent(new CustomEvent("visr:opening-revealed"));
-          }
-          document.querySelector("#visr")?.scrollIntoView({ behavior: "smooth", block: "start" });
-        },
-      });
-      return;
-    }
-
-    window.dispatchEvent(new CustomEvent("visr:opening-revealed"));
-    document.querySelector("#visr")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-
   return (
     <section
       ref={sectionRef}
@@ -349,13 +301,6 @@ export function OpeningSequence() {
           <span className="opening-stage__light opening-stage__light--primary" />
           <span className="opening-stage__light opening-stage__light--edge" />
           <span className="opening-stage__floor" />
-        </div>
-
-        <div className="opening-stage__utility" data-opening-utility>
-          <OpeningSoundControl enabled={soundEnabled} onToggle={handleSoundToggle} />
-          <button type="button" className="opening-skip" onClick={handleSkipIntro}>
-            Skip intro
-          </button>
         </div>
 
         <div className="opening-stage__artifact" data-opening-artifact style={{ opacity: 0 }}>
