@@ -15,8 +15,8 @@
   content: "";
   pointer-events: none;
   background:
-    radial-gradient(circle at 50% 43%, transparent 28%, rgb(0 0 0 / 0.08) 64%, rgb(0 0 0 / 0.46) 100%),
-    linear-gradient(180deg, rgb(0 0 0 / 0.18), transparent 30%, transparent 64%, rgb(0 0 0 / 0.88));
+    radial-gradient(circle at 50% 46%, transparent 30%, rgb(0 0 0 / 0.06) 68%, rgb(0 0 0 / 0.34) 100%),
+    linear-gradient(180deg, rgb(0 0 0 / 0.14), transparent 28%, transparent 72%, rgb(0 0 0 / 0.72));
 }
 
 .photo {
@@ -31,27 +31,25 @@
 .photoH01 {
   z-index: 0;
   object-fit: cover;
-  object-position: 50% 47%;
+  object-position: 50% 58%;
 }
 
 .photoH02 {
   z-index: 1;
-  box-sizing: border-box;
-  padding: max(1.5rem, 4svh) 0 max(4rem, 9svh);
   object-fit: contain;
-  object-position: center;
+  object-position: 50% 50%;
 }
 
 .reflection {
   position: absolute;
-  top: 8%;
-  bottom: 16%;
-  left: 22%;
+  top: 7%;
+  bottom: 12%;
+  left: 18%;
   z-index: 3;
   width: 15%;
   opacity: 0;
   pointer-events: none;
-  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.14), transparent);
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.11), transparent);
   filter: blur(18px);
   transform: skewX(-12deg);
   mix-blend-mode: screen;
@@ -62,7 +60,60 @@
   inset: 0;
   z-index: 4;
   pointer-events: none;
-  background: linear-gradient(180deg, transparent 0 56%, rgb(0 0 0 / 0.08) 68%, rgb(0 0 0 / 0.88) 100%);
+  background: linear-gradient(180deg, rgb(0 0 0 / 0.08), transparent 24%, transparent 68%, rgb(0 0 0 / 0.72) 100%);
+}
+
+:global(.opening-stage) {
+  width: min(100%, 430px);
+}
+
+:global(.opening-stage__copy--intro) {
+  justify-content: flex-start;
+  padding-top: clamp(7rem, 16svh, 10rem);
+  padding-bottom: 0;
+  text-shadow: 0 2px 24px rgb(0 0 0 / 0.82);
+}
+
+:global(.opening-stage__copy--reveal) {
+  justify-content: flex-end;
+  padding-top: 0;
+  padding-bottom: clamp(5rem, 10svh, 7rem);
+}
+
+:global(.opening-stage__reveal-line) {
+  max-width: 15ch;
+  margin: 0;
+  color: #f7f7f5;
+  font-size: clamp(1.75rem, 8.5vw, 2.65rem);
+  font-weight: 400;
+  line-height: 0.98;
+  letter-spacing: -0.045em;
+  text-shadow: 0 2px 28px rgb(0 0 0 / 0.9);
+}
+
+:global([data-opening-intro-copy]),
+:global([data-opening-reveal-copy]) {
+  will-change: transform, opacity;
+}
+
+@media (max-width: 767px) {
+  :global(.opening-stage__headline) {
+    max-width: 8ch;
+    font-size: clamp(2.75rem, 12.5vw, 4rem);
+  }
+
+  :global(.opening-stage__subheadline) {
+    max-width: 10ch;
+    font-size: clamp(1.85rem, 8.8vw, 2.9rem);
+  }
+
+  :global(.opening-stage__copy--intro) {
+    padding-top: 7.5rem;
+  }
+
+  :global(.opening-stage__copy--reveal) {
+    padding-bottom: 5.25rem;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
