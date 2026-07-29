@@ -14,8 +14,8 @@ export function OpeningArtifact({ className = "" }: OpeningArtifactProps) {
     >
       <Image
         className={`${styles.photo} ${styles.photoH01}`}
-        src="/media/phase-15/visr-h01.webp"
-        alt="VISR display system in a dark exhibition setting"
+        src="/media/phase-15/visr-h02.webp"
+        alt="VISR display system teaser in a dark exhibition setting"
         fill
         priority
         sizes="390px"
@@ -24,8 +24,8 @@ export function OpeningArtifact({ className = "" }: OpeningArtifactProps) {
       />
       <Image
         className={`${styles.photo} ${styles.photoH02}`}
-        src="/media/phase-15/visr-h02.webp"
-        alt="A second view of the VISR display system"
+        src="/media/phase-15/visr-h01.webp"
+        alt="Full VISR display system product reveal"
         fill
         sizes="390px"
         draggable={false}
