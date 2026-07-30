@@ -12,10 +12,7 @@ const requestSchema = z.object({
   }),
 });
 
-const allowedServices: Record<"jne" | "jnt", Set<string>> = {
-  jne: new Set(["REG", "YES"]),
-  jnt: new Set(["REG", "NDD"]),
-};
+const supportedCouriers = new Set(["jne", "jnt"]);
 
 async function resolveOriginId() {
   const configured = Number(process.env.RAJAONGKIR_ORIGIN_ID);
@@ -54,11 +51,12 @@ export async function POST(request: Request) {
       }),
     ]);
 
+    // RajaOngkir may return route-specific services such as CTC for same-city
+    // deliveries. Do not hard-code REG/YES/NDD here; expose every service that
+    // the supported courier confirms is available for the selected destination.
     const rates = [...jneRates, ...jntRates]
-      .filter((rate) => {
-        const courier = rate.courierCode as "jne" | "jnt";
-        return courier in allowedServices && allowedServices[courier].has(rate.service);
-      })
+      .filter((rate) => supportedCouriers.has(rate.courierCode))
+      .filter((rate) => Number.isFinite(rate.costIdr) && rate.costIdr >= 0)
       .map((rate) => ({
         id: `${rate.courierCode}:${rate.service}`,
         courier: rate.courierCode,
