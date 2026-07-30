@@ -35,7 +35,13 @@ export default function HomePage() {
             <span className="block">Pre-order price Rp179.000 — website only.</span>
             <span className="block">100 units available.</span>
           </p>
-          <a href="/checkout" className="mt-10 inline-flex rounded-full bg-white px-8 py-4 text-sm font-medium text-black transition hover:bg-white/85">Reserve Your VISR</a>
+          <a
+            href="/checkout"
+            className="mt-10 inline-flex items-center justify-center rounded-full bg-white px-8 py-4 text-sm font-medium transition hover:bg-white/85"
+            style={{ color: "#030303" }}
+          >
+            Reserve Your VISR
+          </a>
         </div>
       </section>
 
