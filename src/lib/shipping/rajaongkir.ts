@@ -34,11 +34,29 @@ function getApiKey() {
   return apiKey;
 }
 
-async function readJson<T>(response: Response): Promise<T> {
-  const payload = (await response.json().catch(() => null)) as T | null;
-  if (!response.ok || !payload) {
-    throw new Error(response.status === 429 ? "RAJAONGKIR_RATE_LIMITED" : "RAJAONGKIR_REQUEST_FAILED");
+async function readJson<T>(response: Response, operation: string): Promise<T> {
+  const raw = await response.text();
+  let payload: T | null = null;
+
+  try {
+    payload = raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    payload = null;
   }
+
+  if (!response.ok || !payload) {
+    console.error("RAJAONGKIR_API_ERROR", {
+      operation,
+      status: response.status,
+      statusText: response.statusText,
+      response: raw.slice(0, 2000),
+    });
+
+    if (response.status === 429) throw new Error("RAJAONGKIR_RATE_LIMITED");
+    if (response.status === 401 || response.status === 403) throw new Error("RAJAONGKIR_AUTH_FAILED");
+    throw new Error("RAJAONGKIR_REQUEST_FAILED");
+  }
+
   return payload;
 }
 
@@ -61,7 +79,7 @@ export async function searchDomesticDestinations(search: string, limit = 8) {
     district_name: string;
     subdistrict_name: string;
     zip_code: string;
-  }>>>(response);
+  }>>>(response, "destination-search");
 
   return (payload.data ?? []).map((item) => ({
     id: Number(item.id),
@@ -104,7 +122,7 @@ export async function calculateDomesticRates(input: {
     description: string;
     cost: number;
     etd: string;
-  }>>>(response);
+  }>>>(response, "domestic-rate");
 
   return (payload.data ?? []).map((item) => ({
     courierName: item.name,
