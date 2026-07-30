@@ -15,7 +15,7 @@ export const commerceConfig = {
     address: "Cluster Kalapa Nunggal Blok A19, Sukamukti, Kabupaten Bandung, Jawa Barat 40291",
   },
   couriers: {
-    domestic: ["JNE"],
+    domestic: ["JNE", "J&T"],
     international: ["POS Indonesia"],
   },
 } as const;
@@ -30,7 +30,7 @@ export const products = {
     stock: 100,
     maxPerOrder: 3,
     weightGrams: 500,
-    box: { lengthCm: 15, widthCm: 10, heightCm: 5 },
+    box: { lengthCm: 15, widthCm: 10, heightCm: 6 },
     included: ["1× VISR Link", "1× New Strap", "Premium Packaging"],
   },
   halo: {
@@ -39,8 +39,8 @@ export const products = {
     price: 89_000,
     maxPerVariant: 1,
     maxCombinedPerOrder: 6,
-    weightGrams: 200,
-    box: { lengthCm: 15, widthCm: 10, heightCm: 5 },
+    weightGrams: 150,
+    box: { lengthCm: 15, widthCm: 8, heightCm: 5 },
   },
   additionalLink: {
     id: "additional-visr-link",
@@ -49,8 +49,8 @@ export const products = {
     price: 19_000,
     stock: 250,
     maxPerOrder: 5,
-    weightGrams: 50,
-    box: { lengthCm: 15, widthCm: 10, heightCm: 5 },
+    weightGrams: 25,
+    box: null,
   },
 } as const;
 
@@ -64,7 +64,7 @@ export const haloVariants: HaloVariant[] = [
 ];
 
 export function formatRupiah(value: number) {
-  return new Intl.NumberFormat("id-ID", {
+  return new Intl.NumberFormat("en-ID", {
     style: "currency",
     currency: "IDR",
     maximumFractionDigits: 0,

@@ -1,302 +1,305 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { calculateStackedPackage, formatRupiah, haloVariants, products } from "@/lib/commerce/catalog";
-import { CustomerInformation, customerInformationSchema, normalizeWhatsApp } from "@/lib/commerce/customer-schema";
+import { useEffect, useMemo, useState } from "react";
+import type { FormEvent, ReactNode } from "react";
+import {
+  calculatePacking,
+  courierLabel,
+  formatRupiah,
+  type CheckoutCourier,
+  type ShippingDestination,
+  type ShippingRate,
+} from "@/lib/shipping";
 
-type HaloSelection = Record<string, boolean>;
-type CheckoutStep = "products" | "information" | "review" | "reserved";
-type PaymentReturn = "finish" | "pending" | "error";
-type FieldErrors = Partial<Record<keyof CustomerInformation, string>>;
-type ReservationResult = { orderId: string; orderNumber: string; expiresAt: string };
+type ProductVariant = { id: string; name: string; slug: string; sku: string; price: number; stock: number };
+type Product = { id: string; name: string; slug: string; sku?: string; price: number; stock: number; variants: ProductVariant[] };
+type CheckoutProducts = { carry: Product; halo: Product; additionalLink: Product };
+type CustomerInformation = {
+  fullName: string;
+  whatsapp: string;
+  email: string;
+  address: string;
+  province: string;
+  city: string;
+  postalCode: string;
+  orderNotes: string;
+};
+type Reservation = { orderId: string; orderNumber: string; expiresAt: string; paymentAmount: number };
+type OrderResponse = { orderId?: string; orderNumber?: string; expiresAt?: string; totalIdr?: number; error?: string };
+type PaymentResponse = { token?: string; redirectUrl?: string; error?: string };
+type SnapResult = { order_id?: string; transaction_status?: string };
+type SnapOptions = {
+  onSuccess?: (result: SnapResult) => void;
+  onPending?: (result: SnapResult) => void;
+  onError?: (result: SnapResult) => void;
+  onClose?: () => void;
+};
+
+declare global {
+  interface Window {
+    snap?: { pay: (token: string, options?: SnapOptions) => void };
+  }
+}
 
 const emptyCustomer: CustomerInformation = {
   fullName: "",
-  whatsapp: "",
+  whatsapp: "62",
   email: "",
   address: "",
   province: "",
   city: "",
   postalCode: "",
   orderNotes: "",
-  preorderConsent: false,
 };
 
-function QuantityControl({ value, min = 0, max, onChange }: { value: number; min?: number; max: number; onChange: (value: number) => void }) {
-  return (
-    <div className="flex items-center rounded-full border border-white/15">
-      <button type="button" aria-label="Decrease quantity" onClick={() => onChange(Math.max(min, value - 1))} className="h-10 w-10 text-lg text-white/65 transition hover:text-white">−</button>
-      <input aria-label="Quantity" inputMode="numeric" value={value} onChange={(event) => onChange(Math.min(max, Math.max(min, Number(event.target.value) || 0)))} className="w-10 bg-transparent text-center text-sm outline-none" />
-      <button type="button" aria-label="Increase quantity" onClick={() => onChange(Math.min(max, value + 1))} className="h-10 w-10 text-lg text-white/65 transition hover:text-white">+</button>
-    </div>
-  );
-}
-
-function Field({ label, name, value, error, multiline = false, required = true, onChange }: { label: string; name: keyof CustomerInformation; value: string; error?: string; multiline?: boolean; required?: boolean; onChange: (name: keyof CustomerInformation, value: string) => void }) {
-  const classes = `mt-2 w-full rounded-2xl border bg-transparent px-4 py-3 text-sm outline-none transition ${error ? "border-red-400/70" : "border-white/12 focus:border-white/40"}`;
-  return (
-    <label className="block text-sm text-white/65">
-      {label}{required ? " *" : ""}
-      {multiline ? <textarea name={name} value={value} onChange={(event) => onChange(name, event.target.value)} rows={4} className={classes} /> : <input name={name} value={value} onChange={(event) => onChange(name, event.target.value)} className={classes} />}
-      {error && <span className="mt-2 block text-xs text-red-300">{error}</span>}
-    </label>
-  );
-}
-
-export function CheckoutClient() {
-  const [step, setStep] = useState<CheckoutStep>("products");
-  const [paymentReturn, setPaymentReturn] = useState<PaymentReturn | null>(null);
-  const [paymentOrderNumber, setPaymentOrderNumber] = useState("");
-  const [carryQty, setCarryQty] = useState(1);
+export default function CheckoutClient({ products }: { products: CheckoutProducts }) {
+  const [carryQty, setCarryQty] = useState(0);
+  const [haloVariantIds, setHaloVariantIds] = useState<string[]>([]);
   const [linkQty, setLinkQty] = useState(0);
-  const [halo, setHalo] = useState<HaloSelection>({});
   const [customer, setCustomer] = useState<CustomerInformation>(emptyCustomer);
-  const [errors, setErrors] = useState<FieldErrors>({});
-  const [reservation, setReservation] = useState<ReservationResult | null>(null);
-  const [submitError, setSubmitError] = useState("");
-  const [paymentError, setPaymentError] = useState("");
+  const [step, setStep] = useState<"products" | "information" | "review" | "reserved">("products");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPaying, setIsPaying] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+  const [paymentError, setPaymentError] = useState("");
+  const [reservation, setReservation] = useState<Reservation | null>(null);
+  const [destinationOptions, setDestinationOptions] = useState<ShippingDestination[]>([]);
+  const [selectedDestination, setSelectedDestination] = useState<ShippingDestination | null>(null);
+  const [courier, setCourier] = useState<CheckoutCourier>("jne");
+  const [rates, setRates] = useState<ShippingRate[]>([]);
+  const [selectedRate, setSelectedRate] = useState<ShippingRate | null>(null);
+  const [isResolvingPostalCode, setIsResolvingPostalCode] = useState(false);
+  const [isLoadingRates, setIsLoadingRates] = useState(false);
+  const [shippingError, setShippingError] = useState("");
+
+  const selectedHalo = useMemo(
+    () => products.halo.variants.filter((variant) => haloVariantIds.includes(variant.id)),
+    [haloVariantIds, products.halo.variants],
+  );
+  const packing = useMemo(
+    () => calculatePacking({ carryQty, haloQty: selectedHalo.length, additionalLinkQty: linkQty }),
+    [carryQty, linkQty, selectedHalo.length],
+  );
+  const subtotal = useMemo(
+    () => carryQty * products.carry.price + selectedHalo.length * products.halo.price + linkQty * products.additionalLink.price,
+    [carryQty, linkQty, products.additionalLink.price, products.carry.price, products.halo.price, selectedHalo.length],
+  );
+  const visibleRates = useMemo(() => rates.filter((rate) => rate.courier === courier), [courier, rates]);
+  const shippingCost = selectedRate?.costIdr ?? 0;
+  const grandTotal = subtotal + shippingCost;
+
+  function selectDestination(destination: ShippingDestination) {
+    setSelectedDestination(destination);
+    setDestinationOptions([]);
+    setCustomer((current) => ({
+      ...current,
+      province: destination.provinceName,
+      city: destination.cityName,
+      postalCode: destination.zipCode,
+    }));
+  }
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const status = params.get("payment");
-    if (status === "finish" || status === "pending" || status === "error") {
-      setPaymentReturn(status);
-      setPaymentOrderNumber(params.get("order_id") ?? "");
-    }
-  }, []);
+    const postalCode = customer.postalCode;
+    setSelectedDestination(null);
+    setDestinationOptions([]);
+    setRates([]);
+    setSelectedRate(null);
+    setCustomer((current) => ({ ...current, province: "", city: "" }));
+    setShippingError("");
+
+    if (step !== "information" || !/^\d{5}$/.test(postalCode)) return;
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setIsResolvingPostalCode(true);
+      try {
+        const response = await fetch(`/api/shipping/destinations?search=${postalCode}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const payload = (await response.json()) as { destinations?: ShippingDestination[]; error?: string };
+        if (!response.ok) throw new Error(payload.error || "Unable to identify this postal code.");
+
+        const exact = (payload.destinations ?? []).filter((destination) => destination.zipCode === postalCode);
+        if (exact.length === 0) throw new Error("Postal code was not found. Check the 5 digits and try again.");
+        if (exact.length === 1) selectDestination(exact[0]);
+        else setDestinationOptions(exact);
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setShippingError(error instanceof Error ? error.message : "Unable to identify this postal code.");
+      } finally {
+        setIsResolvingPostalCode(false);
+      }
+    }, 350);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [customer.postalCode, step]);
 
   useEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
-  }, [step, paymentReturn]);
+    if (step !== "information" || !selectedDestination || subtotal === 0) return;
+    const controller = new AbortController();
+    setIsLoadingRates(true);
+    setRates([]);
+    setSelectedRate(null);
+    setShippingError("");
 
-  const selectedHalo = haloVariants.filter((variant) => halo[variant.id]);
-  const subtotal = carryQty * products.carry.price + selectedHalo.length * products.halo.price + linkQty * products.additionalLink.price;
-  const totalWeight = carryQty * products.carry.weightGrams + selectedHalo.length * products.halo.weightGrams + linkQty * products.additionalLink.weightGrams;
-  const totalBoxes = carryQty + selectedHalo.length + linkQty;
-  const packageSize = useMemo(() => calculateStackedPackage(totalBoxes), [totalBoxes]);
+    fetch("/api/shipping/rates", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        destinationId: selectedDestination.id,
+        cart: { carryQty, haloQty: selectedHalo.length, linkQty },
+      }),
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const payload = (await response.json()) as { rates?: ShippingRate[]; error?: string };
+        if (!response.ok) throw new Error(payload.error || "Unable to calculate shipping.");
+        setRates(payload.rates ?? []);
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setShippingError(error instanceof Error ? error.message : "Unable to calculate shipping.");
+      })
+      .finally(() => setIsLoadingRates(false));
 
-  const items = useMemo(() => [
-    ...(carryQty > 0 ? [{ sku: products.carry.sku, quantity: carryQty }] : []),
-    ...selectedHalo.map((variant) => ({ sku: variant.sku, quantity: 1 })),
-    ...(linkQty > 0 ? [{ sku: products.additionalLink.sku, quantity: linkQty }] : []),
-  ], [carryQty, linkQty, selectedHalo]);
+    return () => controller.abort();
+  }, [carryQty, linkQty, selectedDestination, selectedHalo.length, step, subtotal]);
 
-  const updateCustomer = (name: keyof CustomerInformation, value: string | boolean) => {
-    setCustomer((current) => ({ ...current, [name]: value }));
-    setErrors((current) => ({ ...current, [name]: undefined }));
+  useEffect(() => {
+    setSelectedRate(null);
+  }, [courier]);
+
+  const toggleHalo = (variantId: string) => {
+    setHaloVariantIds((current) => current.includes(variantId) ? current.filter((id) => id !== variantId) : [...current, variantId]);
   };
 
-  const continueToInformation = () => {
-    if (subtotal > 0) setStep("information");
-  };
-
-  const continueToReview = (event: FormEvent<HTMLFormElement>) => {
+  const submitInformation = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const result = customerInformationSchema.safeParse(customer);
-    if (!result.success) {
-      const nextErrors: FieldErrors = {};
-      for (const issue of result.error.issues) nextErrors[issue.path[0] as keyof CustomerInformation] = issue.message;
-      setErrors(nextErrors);
-      return;
-    }
-    setCustomer({ ...result.data, whatsapp: normalizeWhatsApp(result.data.whatsapp) });
-    setErrors({});
+    if (!selectedDestination) return setShippingError("Enter a valid postal code and select the matching area.");
+    if (!selectedRate) return setShippingError("Select a shipping service before reviewing your reservation.");
+    setShippingError("");
     setStep("review");
   };
 
   const createReservation = async () => {
-    if (isSubmitting || items.length === 0) return;
+    if (!selectedDestination || !selectedRate || !products.carry.sku || !products.additionalLink.sku) return;
     setIsSubmitting(true);
     setSubmitError("");
-
     try {
+      const items = [
+        ...(carryQty > 0 ? [{ sku: products.carry.sku, quantity: carryQty }] : []),
+        ...selectedHalo.map((variant) => ({ sku: variant.sku, quantity: 1 })),
+        ...(linkQty > 0 ? [{ sku: products.additionalLink.sku, quantity: linkQty }] : []),
+      ];
       const response = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           customer: {
             fullName: customer.fullName,
-            whatsapp: normalizeWhatsApp(customer.whatsapp),
+            whatsapp: customer.whatsapp,
             email: customer.email,
             address: customer.address,
             province: customer.province,
             city: customer.city,
             postalCode: customer.postalCode,
-            notes: customer.orderNotes ?? "",
+            notes: customer.orderNotes,
             preorderConsent: true,
           },
           items,
+          shipping: {
+            destinationId: selectedDestination.id,
+            destinationLabel: selectedDestination.label,
+            courier: selectedRate.courier,
+            service: selectedRate.service,
+            quotedCostIdr: selectedRate.costIdr,
+          },
         }),
       });
-
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(typeof payload.error === "string" ? payload.error : "Reservation could not be created.");
-
-      setReservation(payload as ReservationResult);
+      const payload = (await response.json()) as OrderResponse;
+      if (!response.ok || !payload.orderId || !payload.orderNumber || !payload.expiresAt || typeof payload.totalIdr !== "number") {
+        throw new Error(payload.error || "Could not create your reservation.");
+      }
+      setReservation({ orderId: payload.orderId, orderNumber: payload.orderNumber, expiresAt: payload.expiresAt, paymentAmount: payload.totalIdr });
       setStep("reserved");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Reservation could not be created.";
-      setSubmitError(message.includes("stock") || message.includes("Stock") ? "One of your selected items is no longer available in that quantity. Please edit your reservation." : message);
+      setSubmitError(error instanceof Error ? error.message : "Could not create your reservation.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const payReservation = async () => {
-    if (!reservation || isPaying) return;
+    if (!reservation) return;
     setIsPaying(true);
     setPaymentError("");
-
     try {
       const response = await fetch("/api/payments/snap", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orderId: reservation.orderId }),
       });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(typeof payload.error === "string" ? payload.error : "Payment could not be started.");
-      if (typeof payload.redirectUrl !== "string" || !payload.redirectUrl.startsWith("https://")) throw new Error("INVALID_PAYMENT_URL");
-      window.location.assign(payload.redirectUrl);
+      const payload = (await response.json()) as PaymentResponse;
+      if (!response.ok || !payload.token) throw new Error(payload.error || "Could not start payment.");
+      if (window.snap) {
+        window.snap.pay(payload.token, {
+          onSuccess: () => window.location.assign(`/checkout?payment=finish&order_id=${encodeURIComponent(reservation.orderNumber)}`),
+          onPending: () => window.location.assign(`/checkout?payment=pending&order_id=${encodeURIComponent(reservation.orderNumber)}`),
+          onError: () => setPaymentError("Payment could not be completed. Your reservation remains active until the deadline above."),
+          onClose: () => setIsPaying(false),
+        });
+        return;
+      }
+      if (payload.redirectUrl) window.location.assign(payload.redirectUrl);
+      else throw new Error("Payment window is not ready. Refresh the page and try again.");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Payment could not be started.";
-      setPaymentError(message === "PAYMENT_NOT_CONFIGURED" ? "Midtrans Sandbox is not configured yet." : message === "ORDER_EXPIRED" ? "This reservation has expired. Please create a new reservation." : "Payment could not be started. Please try again.");
+      setPaymentError(error instanceof Error ? error.message : "Could not start payment.");
       setIsPaying(false);
     }
   };
 
-  if (paymentReturn) {
-    const content = paymentReturn === "finish"
-      ? {
-          eyebrow: "Payment received",
-          title: "Your VISR is secured.",
-          body: "Thank you. Midtrans has returned your payment result and our server is verifying the final status. You will receive the next order update through email or WhatsApp.",
-          note: "Please keep your payment receipt until the order confirmation arrives.",
-        }
-      : paymentReturn === "pending"
-        ? {
-            eyebrow: "Payment pending",
-            title: "Your reservation is still held.",
-            body: "Your payment has not been completed yet. Follow the instructions from Midtrans before the reservation deadline to secure your VISR.",
-            note: "Bank transfers and some payment methods may need additional processing time.",
-          }
-        : {
-            eyebrow: "Payment incomplete",
-            title: "Your payment was not completed.",
-            body: "No successful payment was recorded from this attempt. You can return to checkout and create a new payment attempt while stock remains available.",
-            note: "Your bank or payment provider may temporarily hold a failed authorization.",
-          };
-
-    return (
-      <main className="min-h-screen bg-black text-white">
-        <div className="visr-container flex min-h-screen flex-col py-12 md:py-20">
-          <a href="/" className="visr-label text-white/45">← Back to exhibition</a>
-          <div className="my-auto max-w-3xl py-20">
-            <p className="visr-label text-white/42">{content.eyebrow}</p>
-            <h1 className="mt-5 max-w-[13ch] text-[clamp(3rem,7vw,6rem)] font-normal leading-[0.94] tracking-[-0.055em]">
-              {content.title}
-            </h1>
-            <div className="mt-12 rounded-[2rem] border border-white/12 bg-white/[0.035] p-7 md:p-10">
-              {paymentOrderNumber && (
-                <>
-                  <p className="visr-label text-white/40">Order number</p>
-                  <p className="mt-4 break-all text-2xl tracking-[-0.03em] md:text-4xl">{paymentOrderNumber}</p>
-                </>
-              )}
-              <p className={`${paymentOrderNumber ? "mt-8" : ""} max-w-2xl text-sm leading-7 text-white/58`}>{content.body}</p>
-              <p className="mt-6 text-xs leading-5 text-white/35">{content.note}</p>
-              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                {paymentReturn !== "finish" && <a href="/checkout" className="rounded-full bg-white px-6 py-4 text-center text-sm font-medium !text-black">Return to checkout</a>}
-                <a href="/" className="rounded-full border border-white/15 px-6 py-4 text-center text-sm text-white/75">Back to exhibition</a>
-              </div>
-            </div>
-          </div>
-        </div>
-      </main>
-    );
-  }
-
   return (
-    <main className="min-h-screen bg-black text-white">
-      <div className="visr-container py-12 md:py-20">
-        <a href="/" className="visr-label text-white/45">← Back to exhibition</a>
-        <div className="mt-10 flex flex-wrap gap-3 text-[11px] uppercase tracking-[0.18em] text-white/35">
-          <span className={step === "products" ? "text-white" : ""}>01 Products</span><span>—</span>
-          <span className={step === "information" ? "text-white" : ""}>02 Information</span><span>—</span>
-          <span className={step === "review" ? "text-white" : ""}>03 Review</span><span>—</span>
-          <span className={step === "reserved" ? "text-white" : ""}>04 Reserved</span>
-        </div>
-
-        <div className="mt-12 grid gap-14 lg:grid-cols-[1.15fr_0.85fr]">
+    <main className="min-h-screen bg-[#050505] text-white">
+      <div className="mx-auto max-w-7xl px-6 py-10 md:px-12 md:py-16">
+        <div className="mb-10 border-b border-white/10 pb-8"><p className="visr-label text-white/40">VISR Private Reservation</p><h1 className="mt-4 max-w-3xl text-4xl tracking-[-0.04em] md:text-6xl">Complete your Batch 2 reservation.</h1></div>
+        <div className="grid gap-10 lg:grid-cols-[1fr_390px]">
           <section>
-            <p className="visr-label text-white/42">Reserve Your VISR</p>
-            <h1 className="mt-5 max-w-[13ch] text-[clamp(2.75rem,6vw,5.5rem)] font-normal leading-[0.94] tracking-[-0.055em]">
-              {step === "products" ? "Curate your Batch 2." : step === "information" ? "Delivery details." : step === "review" ? "Final review." : "Your VISR is reserved."}
-            </h1>
-
-            {step === "products" && <div className="mt-14 border-t border-white/10">
-              <article className="grid gap-7 border-b border-white/10 py-9 md:grid-cols-[1fr_auto] md:items-center">
-                <div><p className="text-2xl">VISR Carry Gen 2</p><p className="mt-2 text-sm text-white/45">Includes one VISR Link, new strap and premium packaging.</p><p className="mt-4">{formatRupiah(products.carry.price)}</p></div>
-                <QuantityControl value={carryQty} min={0} max={products.carry.maxPerOrder} onChange={setCarryQty} />
-              </article>
-              <article className="border-b border-white/10 py-9">
-                <div className="flex items-end justify-between gap-4"><div><p className="text-2xl">Halo Collection</p><p className="mt-2 text-sm text-white/45">Choose up to six colors. One unit per color.</p></div><p>{formatRupiah(products.halo.price)}</p></div>
-                <div className="mt-7 grid gap-3 sm:grid-cols-2">{haloVariants.map((variant) => { const selected = Boolean(halo[variant.id]); return <button key={variant.id} type="button" onClick={() => setHalo((current) => ({ ...current, [variant.id]: !current[variant.id] }))} className={`flex items-center justify-between rounded-2xl border px-5 py-4 text-left transition ${selected ? "border-white bg-white text-black" : "border-white/12 text-white/70 hover:border-white/30"}`}><span>{variant.name}</span><span className="text-xs">{selected ? "Added ✓" : "Add"}</span></button>; })}</div>
-              </article>
-              <article className="grid gap-7 border-b border-white/10 py-9 md:grid-cols-[1fr_auto] md:items-center">
-                <div><p className="text-2xl">Additional VISR Link</p><p className="mt-2 text-sm text-white/45">Every Carry already includes one. Add extras only when needed.</p><p className="mt-4">{formatRupiah(products.additionalLink.price)}</p></div>
-                <QuantityControl value={linkQty} max={products.additionalLink.maxPerOrder} onChange={setLinkQty} />
-              </article>
+            {step === "products" && <div className="space-y-6">
+              <ProductCard label="Core System" title={products.carry.name} note="Includes 1 VISR Link · 500 g product weight" price={products.carry.price} stock={products.carry.stock}><QuantityControl value={carryQty} max={Math.min(products.carry.stock, 3)} onChange={setCarryQty} /></ProductCard>
+              <article className="rounded-[2rem] border border-white/10 bg-white/[0.025] p-7 md:p-9"><div className="flex items-start justify-between gap-6"><div><p className="visr-label text-white/40">Halo Collection</p><h2 className="mt-3 text-2xl">Choose your halo.</h2><p className="mt-3 text-sm text-white/45">Each Halo is 150 g. One per color.</p></div><p className="text-lg">{formatRupiah(products.halo.price)}</p></div><div className="mt-7 grid gap-3 sm:grid-cols-2">{products.halo.variants.map((variant) => { const selected = haloVariantIds.includes(variant.id); return <button key={variant.id} type="button" disabled={variant.stock === 0} onClick={() => toggleHalo(variant.id)} className={`rounded-2xl border p-5 text-left transition ${selected ? "border-white bg-white text-black" : "border-white/10 bg-black/20 hover:border-white/30"} disabled:opacity-30`}><span className="block">{variant.name}</span><span className={`mt-2 block text-xs ${selected ? "text-black/55" : "text-white/35"}`}>{variant.stock} available</span></button>; })}</div></article>
+              <ProductCard label="Optional Add-on" title="Additional VISR Link" note="25 g each · for wall, desk, and future VISR systems." price={products.additionalLink.price} stock={products.additionalLink.stock}><QuantityControl value={linkQty} max={Math.min(products.additionalLink.stock, 5)} onChange={setLinkQty} /></ProductCard>
             </div>}
 
-            {step === "information" && <form onSubmit={continueToReview} className="mt-12 grid gap-6 sm:grid-cols-2">
-              <div className="sm:col-span-2"><Field label="Full name" name="fullName" value={customer.fullName} error={errors.fullName} onChange={updateCustomer} /></div>
-              <Field label="WhatsApp number" name="whatsapp" value={customer.whatsapp} error={errors.whatsapp} onChange={updateCustomer} />
-              <Field label="Email" name="email" value={customer.email} error={errors.email} onChange={updateCustomer} />
-              <div className="sm:col-span-2"><Field label="Address" name="address" value={customer.address} error={errors.address} multiline onChange={updateCustomer} /></div>
-              <Field label="Province" name="province" value={customer.province} error={errors.province} onChange={updateCustomer} />
-              <Field label="City / Regency" name="city" value={customer.city} error={errors.city} onChange={updateCustomer} />
-              <Field label="Postal code" name="postalCode" value={customer.postalCode} error={errors.postalCode} onChange={updateCustomer} />
-              <div className="sm:col-span-2"><Field label="Order notes" name="orderNotes" value={customer.orderNotes ?? ""} error={errors.orderNotes} multiline required={false} onChange={updateCustomer} /></div>
-              <label className="sm:col-span-2 flex gap-3 rounded-2xl border border-white/10 p-5 text-sm leading-6 text-white/55"><input type="checkbox" checked={customer.preorderConsent} onChange={(event) => updateCustomer("preorderConsent", event.target.checked)} className="mt-1" /><span>I understand that this is a pre-order item and shipping is estimated approximately two weeks after the pre-order closes.</span></label>
-              {errors.preorderConsent && <p className="sm:col-span-2 text-xs text-red-300">{errors.preorderConsent}</p>}
-              <div className="sm:col-span-2 flex gap-3"><button type="button" onClick={() => setStep("products")} className="rounded-full border border-white/15 px-6 py-4 text-sm">Back</button><button type="submit" className="flex-1 rounded-full bg-white px-6 py-4 text-sm font-medium text-black">Continue to Review</button></div>
+            {step === "information" && <form onSubmit={submitInformation} className="mt-12 space-y-8">
+              <div><p className="visr-label text-white/40">Information</p><h2 className="mt-3 text-3xl">Where should we send your VISR?</h2></div>
+              <div className="grid gap-4 md:grid-cols-2"><TextField label="Full name" value={customer.fullName} onChange={(value) => setCustomer({ ...customer, fullName: value })} required /><TextField label="WhatsApp" value={customer.whatsapp} onChange={(value) => setCustomer({ ...customer, whatsapp: value.replace(/\D/g, "") })} required /><TextField label="Email" type="email" value={customer.email} onChange={(value) => setCustomer({ ...customer, email: value })} required /><TextField label="Postal code" inputMode="numeric" maxLength={5} value={customer.postalCode} onChange={(value) => setCustomer({ ...customer, postalCode: value.replace(/\D/g, "").slice(0, 5) })} required /></div>
+              {isResolvingPostalCode && <p className="text-sm text-white/40">Identifying postal code…</p>}
+              {destinationOptions.length > 1 && <div className="rounded-[2rem] border border-white/10 p-6"><p className="text-sm text-white/55">Choose the area that matches your address.</p><div className="mt-4 space-y-2">{destinationOptions.map((destination) => <button key={destination.id} type="button" onClick={() => selectDestination(destination)} className="w-full rounded-2xl border border-white/10 p-4 text-left text-sm hover:border-white/30">{destination.label}</button>)}</div><p className="mt-4 text-[10px] uppercase tracking-[0.18em] text-white/28">Powered by RajaOngkir</p></div>}
+              <TextField label="Street address" value={customer.address} onChange={(value) => setCustomer({ ...customer, address: value })} required />
+              <div className="rounded-[2rem] border border-white/10 p-6"><p className="visr-label text-white/40">Courier</p><div className="mt-4 grid grid-cols-2 gap-3">{(["jne", "jnt"] as CheckoutCourier[]).map((item) => <button key={item} type="button" onClick={() => setCourier(item)} className={`rounded-2xl border p-4 text-sm ${courier === item ? "border-white bg-white text-black" : "border-white/10"}`}>{item === "jne" ? "JNE" : "J&T Express"}</button>)}</div><div className="mt-5 space-y-3">{isLoadingRates && <p className="text-sm text-white/40">Calculating shipping…</p>}{!isLoadingRates && selectedDestination && visibleRates.length === 0 && <p className="text-sm text-white/40">No service available from this courier.</p>}{visibleRates.map((rate) => <button key={rate.id ?? `${rate.courier}-${rate.service}`} type="button" onClick={() => setSelectedRate(rate)} className={`flex w-full items-center justify-between rounded-2xl border p-4 text-left ${selectedRate?.id === rate.id ? "border-white bg-white text-black" : "border-white/10"}`}><span><span className="block text-sm">{courierLabel(rate)}</span><span className={`mt-1 block text-xs ${selectedRate?.id === rate.id ? "text-black/55" : "text-white/35"}`}>{rate.etd ? `${rate.etd} days` : rate.description}</span></span><span>{formatRupiah(rate.costIdr)}</span></button>)}</div><p className="mt-5 text-[10px] uppercase tracking-[0.18em] text-white/28">Powered by RajaOngkir</p></div>
+              <label className="block"><span className="mb-2 block text-xs uppercase tracking-[0.16em] text-white/35">Order notes</span><textarea value={customer.orderNotes} onChange={(event) => setCustomer({ ...customer, orderNotes: event.target.value })} rows={4} className="w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm outline-none focus:border-white/35" /></label>
+              {shippingError && <div className="rounded-2xl border border-red-400/30 bg-red-400/10 p-5 text-sm text-red-200">{shippingError}</div>}
+              <div className="flex gap-3"><button type="button" onClick={() => setStep("products")} className="rounded-full border border-white/15 px-6 py-4 text-sm">Back</button><button type="submit" className="flex-1 rounded-full bg-white px-6 py-4 text-sm font-medium text-black">Review Reservation</button></div>
             </form>}
 
-            {step === "review" && <div className="mt-12 space-y-8">
-              <div className="rounded-[2rem] border border-white/10 p-7"><p className="visr-label text-white/40">Customer</p><p className="mt-5 text-xl">{customer.fullName}</p><p className="mt-2 text-sm leading-6 text-white/50">+{customer.whatsapp}<br />{customer.email}<br />{customer.address}, {customer.city}, {customer.province} {customer.postalCode}</p>{customer.orderNotes && <p className="mt-4 text-sm text-white/40">Note: {customer.orderNotes}</p>}</div>
-              {submitError && <div className="rounded-2xl border border-red-400/30 bg-red-400/10 p-5 text-sm leading-6 text-red-200">{submitError}</div>}
-              <div className="flex gap-3"><button type="button" onClick={() => setStep("information")} disabled={isSubmitting} className="rounded-full border border-white/15 px-6 py-4 text-sm disabled:opacity-40">Edit Information</button><button type="button" onClick={createReservation} disabled={isSubmitting} className="flex-1 rounded-full bg-white px-6 py-4 text-sm font-medium text-black disabled:cursor-wait disabled:opacity-55">{isSubmitting ? "Reserving stock…" : "Create Reservation"}</button></div>
-            </div>}
+            {step === "review" && <div className="mt-12 space-y-8"><div className="rounded-[2rem] border border-white/10 p-7"><p className="visr-label text-white/40">Customer</p><p className="mt-5 text-xl">{customer.fullName}</p><p className="mt-2 text-sm leading-6 text-white/50">+{customer.whatsapp}<br />{customer.email}<br />{customer.address}, {customer.city}, {customer.province} {customer.postalCode}</p></div>{selectedDestination && selectedRate && <div className="rounded-[2rem] border border-white/10 p-7"><p className="visr-label text-white/40">Shipping</p><p className="mt-5 text-xl">{courierLabel(selectedRate)}</p><p className="mt-2 text-sm text-white/50">{selectedDestination.label}<br />{formatRupiah(selectedRate.costIdr)}</p></div>}{submitError && <div className="rounded-2xl border border-red-400/30 bg-red-400/10 p-5 text-sm text-red-200">{submitError}</div>}<div className="flex gap-3"><button type="button" onClick={() => setStep("information")} className="rounded-full border border-white/15 px-6 py-4 text-sm">Edit Information</button><button type="button" onClick={createReservation} disabled={isSubmitting} className="flex-1 rounded-full bg-white px-6 py-4 text-sm font-medium text-black disabled:opacity-55">{isSubmitting ? "Reserving stock…" : "Create Reservation"}</button></div></div>}
 
-            {step === "reserved" && reservation && <div className="mt-12 rounded-[2rem] border border-white/12 bg-white/[0.035] p-7 md:p-10">
-              <p className="visr-label text-white/40">Reservation Confirmed</p>
-              <p className="mt-6 text-sm text-white/45">Your order number</p>
-              <p className="mt-2 break-all text-2xl tracking-[-0.03em] md:text-4xl">{reservation.orderNumber}</p>
-              <p className="mt-8 max-w-xl text-sm leading-7 text-white/55">Your selected stock is held until {new Date(reservation.expiresAt).toLocaleString("en-ID", { dateStyle: "long", timeStyle: "short", timeZone: "Asia/Jakarta" })} WIB. Complete payment before this deadline to secure your Batch 2 reservation.</p>
-              {paymentError && <div className="mt-6 rounded-2xl border border-red-400/30 bg-red-400/10 p-5 text-sm leading-6 text-red-200">{paymentError}</div>}
-              <button type="button" onClick={payReservation} disabled={isPaying} className="mt-8 w-full rounded-full bg-white px-6 py-4 text-sm font-medium text-black transition hover:bg-white/85 disabled:cursor-wait disabled:opacity-55">{isPaying ? "Opening secure payment…" : `Pay ${formatRupiah(subtotal)} with Midtrans`}</button>
-              <p className="mt-5 text-xs leading-5 text-white/32">Save this order number. Midtrans will handle the payment securely, while the webhook confirms the final payment status.</p>
-            </div>}
+            {step === "reserved" && reservation && <div className="mt-12 rounded-[2rem] border border-white/12 bg-white/[0.035] p-7 md:p-10"><p className="visr-label text-white/40">Reservation Confirmed</p><p className="mt-6 text-sm text-white/45">Your order number</p><p className="mt-2 text-3xl">{reservation.orderNumber}</p><p className="mt-8 text-sm leading-7 text-white/55">Stock is held until {new Date(reservation.expiresAt).toLocaleString("en-ID", { dateStyle: "long", timeStyle: "short", timeZone: "Asia/Jakarta" })} WIB.</p>{paymentError && <div className="mt-6 rounded-2xl border border-red-400/30 bg-red-400/10 p-5 text-sm text-red-200">{paymentError}</div>}<button type="button" onClick={payReservation} disabled={isPaying} className="mt-8 w-full rounded-full bg-white px-6 py-4 text-sm font-medium text-black disabled:opacity-55">{isPaying ? "Opening secure payment…" : `Pay ${formatRupiah(reservation.paymentAmount)} with Midtrans`}</button></div>}
           </section>
 
-          <aside className="lg:sticky lg:top-8 lg:self-start">
-            <div className="rounded-[2rem] border border-white/10 bg-white/[0.035] p-7 md:p-9">
-              <p className="visr-label text-white/42">Reservation Summary</p>
-              <div className="mt-8 space-y-5 text-sm">
-                {carryQty > 0 && <div className="flex justify-between gap-4"><span>VISR Carry Gen 2 × {carryQty}</span><span>{formatRupiah(carryQty * products.carry.price)}</span></div>}
-                {selectedHalo.map((variant) => <div key={variant.id} className="flex justify-between gap-4"><span>{variant.name}</span><span>{formatRupiah(products.halo.price)}</span></div>)}
-                {linkQty > 0 && <div className="flex justify-between gap-4"><span>Additional VISR Link × {linkQty}</span><span>{formatRupiah(linkQty * products.additionalLink.price)}</span></div>}
-              </div>
-              <div className="mt-8 border-t border-white/10 pt-6"><div className="flex justify-between text-lg"><span>Subtotal</span><span>{formatRupiah(subtotal)}</span></div><p className="mt-3 text-xs leading-5 text-white/40">Shipping is calculated from the destination and paid by the customer.</p></div>
-              <div className="mt-8 rounded-2xl bg-white/[0.05] p-5 text-xs leading-5 text-white/50"><p>{totalWeight.toLocaleString("en-ID")} g estimated product weight</p><p>{packageSize.lengthCm} × {packageSize.widthCm} × {packageSize.heightCm} cm stacked package</p><p>{totalBoxes} box{totalBoxes === 1 ? "" : "es"}</p></div>
-              {step === "products" && <button type="button" onClick={continueToInformation} disabled={subtotal === 0} className="mt-7 w-full rounded-full bg-white px-6 py-4 text-sm font-medium text-black transition hover:bg-white/85 disabled:cursor-not-allowed disabled:opacity-30">Continue to Information</button>}
-              <p className="mt-5 text-center text-xs text-white/32">Payments are verified server-side through Midtrans notifications.</p>
-            </div>
-          </aside>
+          <aside className="lg:sticky lg:top-8 lg:self-start"><div className="rounded-[2rem] border border-white/10 bg-white/[0.035] p-7 md:p-9"><p className="visr-label text-white/42">Reservation Summary</p><div className="mt-8 space-y-5 text-sm">{carryQty > 0 && <SummaryLine label={`VISR Carry Gen 2 × ${carryQty}`} value={carryQty * products.carry.price} />}{selectedHalo.map((variant) => <SummaryLine key={variant.id} label={variant.name} value={products.halo.price} />)}{linkQty > 0 && <SummaryLine label={`Additional VISR Link × ${linkQty}`} value={linkQty * products.additionalLink.price} />}</div><div className="mt-8 space-y-3 border-t border-white/10 pt-6"><SummaryLine label="Subtotal" value={subtotal} /><div className="flex justify-between text-sm"><span>Shipping</span><span>{selectedRate ? formatRupiah(shippingCost) : "—"}</span></div><div className="flex justify-between border-t border-white/10 pt-4 text-lg"><span>Total</span><span>{formatRupiah(grandTotal)}</span></div></div><div className="mt-8 rounded-2xl bg-white/[0.05] p-5 text-xs leading-5 text-white/50"><p>{packing.actualWeightGrams.toLocaleString("en-ID")} g actual weight</p><p>{packing.lengthCm} × {packing.widthCm} × {packing.heightCm} cm packing profile</p></div>{step === "products" && <button type="button" onClick={() => subtotal > 0 && setStep("information")} disabled={subtotal === 0} className="mt-7 w-full rounded-full bg-white px-6 py-4 text-sm font-medium text-black disabled:opacity-30">Continue to Information</button>}</div></aside>
         </div>
       </div>
     </main>
   );
 }
+
+function ProductCard({ label, title, note, price, stock, children }: { label: string; title: string; note: string; price: number; stock: number; children: ReactNode }) { return <article className="rounded-[2rem] border border-white/10 bg-white/[0.025] p-7 md:p-9"><div className="flex items-start justify-between gap-6"><div><p className="visr-label text-white/40">{label}</p><h2 className="mt-3 text-2xl">{title}</h2><p className="mt-3 text-sm text-white/45">{note}</p></div><p className="text-lg">{formatRupiah(price)}</p></div><div className="mt-7 flex items-center justify-between border-t border-white/10 pt-6"><p className="text-xs text-white/35">{stock} available</p>{children}</div></article>; }
+function QuantityControl({ value, max, onChange }: { value: number; max: number; onChange: (value: number) => void }) { return <div className="flex items-center rounded-full border border-white/12"><button type="button" onClick={() => onChange(Math.max(0, value - 1))} className="px-4 py-2 text-lg">−</button><span className="min-w-10 text-center text-sm">{value}</span><button type="button" onClick={() => onChange(Math.min(max, value + 1))} className="px-4 py-2 text-lg">+</button></div>; }
+function TextField({ label, value, onChange, required, type = "text", readOnly, inputMode, maxLength }: { label: string; value: string; onChange: (value: string) => void; required?: boolean; type?: string; readOnly?: boolean; inputMode?: "text" | "numeric" | "email" | "tel"; maxLength?: number }) { return <label className="block"><span className="mb-2 block text-xs uppercase tracking-[0.16em] text-white/35">{label}</span><input type={type} value={value} onChange={(event) => onChange(event.target.value)} required={required} readOnly={readOnly} inputMode={inputMode} maxLength={maxLength} className={`w-full rounded-2xl border border-white/10 px-4 py-3 text-sm outline-none ${readOnly ? "bg-white/[0.02] text-white/55" : "bg-white/[0.04] focus:border-white/35"}`} /></label>; }
+function SummaryLine({ label, value }: { label: string; value: number }) { return <div className="flex justify-between gap-4"><span>{label}</span><span>{formatRupiah(value)}</span></div>; }
