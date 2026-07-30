@@ -10,7 +10,10 @@ type ReservationResult = {
   expires_at: string;
 };
 
-type OrderRow = { subtotal_idr: number };
+type ShippingResult = {
+  shipping_cost_idr: number;
+  total_idr: number;
+};
 
 async function resolveOriginId() {
   const configured = Number(process.env.RAJAONGKIR_ORIGIN_ID);
@@ -80,59 +83,38 @@ export async function POST(request: Request) {
     const reservation = Array.isArray(payload) ? payload[0] : payload;
     if (!reservation?.order_number || !reservation.order_id) return NextResponse.json({ error: "INVALID_RESERVATION_RESPONSE" }, { status: 502 });
 
-    const orderResponse = await fetch(`${supabaseUrl}/rest/v1/orders?id=eq.${reservation.order_id}&select=subtotal_idr`, { headers, cache: "no-store" });
-    if (!orderResponse.ok) return NextResponse.json({ error: "ORDER_LOOKUP_FAILED" }, { status: 502 });
-    const orders = (await orderResponse.json()) as OrderRow[];
-    const subtotal = Number(orders[0]?.subtotal_idr);
-    if (!Number.isFinite(subtotal)) return NextResponse.json({ error: "INVALID_ORDER_TOTAL" }, { status: 502 });
-
-    const shippingCostIdr = liveRate.costIdr;
-    const totalIdr = subtotal + shippingCostIdr;
-    const packingBoxCount = cart.carryQty > 0 || cart.haloQty > 0 || cart.linkQty > 0 ? 1 : 0;
-
-    const [orderUpdateResponse, paymentUpdateResponse, shipmentResponse] = await Promise.all([
-      fetch(`${supabaseUrl}/rest/v1/orders?id=eq.${reservation.order_id}`, {
-        method: "PATCH",
-        headers: { ...headers, Prefer: "return=minimal" },
-        body: JSON.stringify({
-          shipping_cost_idr: shippingCostIdr,
-          total_weight_grams: profile.actualWeightGrams,
-          box_count: packingBoxCount,
-          package_length_cm: profile.lengthCm,
-          package_width_cm: profile.widthCm,
-          package_height_cm: profile.heightCm,
-        }),
-        cache: "no-store",
+    const shippingResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/apply_visr_shipping`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        p_order_id: reservation.order_id,
+        p_courier: selectedCourier,
+        p_service: liveRate.service,
+        p_shipping_cost_idr: liveRate.costIdr,
+        p_actual_weight_grams: profile.actualWeightGrams,
+        p_box_count: 1,
+        p_length_cm: profile.lengthCm,
+        p_width_cm: profile.widthCm,
+        p_height_cm: profile.heightCm,
       }),
-      fetch(`${supabaseUrl}/rest/v1/payments?order_id=eq.${reservation.order_id}`, {
-        method: "PATCH",
-        headers: { ...headers, Prefer: "return=minimal" },
-        body: JSON.stringify({ amount_idr: totalIdr }),
-        cache: "no-store",
-      }),
-      fetch(`${supabaseUrl}/rest/v1/shipments`, {
-        method: "POST",
-        headers: { ...headers, Prefer: "return=minimal" },
-        body: JSON.stringify({
-          order_id: reservation.order_id,
-          courier: selectedCourier.toUpperCase(),
-          service: liveRate.service,
-          shipping_cost_idr: shippingCostIdr,
-        }),
-        cache: "no-store",
-      }),
-    ]);
+      cache: "no-store",
+    });
 
-    if (!orderUpdateResponse.ok || !paymentUpdateResponse.ok || !shipmentResponse.ok) {
-      return NextResponse.json({ error: "SHIPPING_PERSISTENCE_FAILED" }, { status: 502 });
+    if (!shippingResponse.ok) {
+      const failure = await shippingResponse.json().catch(() => ({}));
+      return NextResponse.json({ error: "SHIPPING_PERSISTENCE_FAILED", details: failure }, { status: 502 });
     }
+
+    const shippingPayload = (await shippingResponse.json()) as ShippingResult[] | ShippingResult;
+    const shipping = Array.isArray(shippingPayload) ? shippingPayload[0] : shippingPayload;
+    if (!shipping) return NextResponse.json({ error: "INVALID_SHIPPING_RESPONSE" }, { status: 502 });
 
     return NextResponse.json({
       orderId: reservation.order_id,
       orderNumber: reservation.order_number,
       expiresAt: reservation.expires_at,
-      shippingCostIdr,
-      totalIdr,
+      shippingCostIdr: shipping.shipping_cost_idr,
+      totalIdr: shipping.total_idr,
     }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "ORDER_CREATION_FAILED";
