@@ -62,12 +62,6 @@ export async function POST(request: Request) {
   const isProduction = process.env.MIDTRANS_IS_PRODUCTION === "true";
 
   if (!serverKey || !supabaseUrl || !serviceRoleKey) {
-    console.error("MIDTRANS_WEBHOOK_CONFIGURATION_ERROR", {
-      hasServerKey: Boolean(serverKey),
-      hasSupabaseUrl: Boolean(supabaseUrl),
-      hasServiceRoleKey: Boolean(serviceRoleKey),
-      environment: isProduction ? "production" : "sandbox",
-    });
     return NextResponse.json({ error: "PAYMENT_NOT_CONFIGURED" }, { status: 503 });
   }
 
@@ -95,19 +89,12 @@ export async function POST(request: Request) {
   );
 
   if (!orderResponse.ok) {
-    console.error("MIDTRANS_WEBHOOK_ORDER_LOOKUP_ERROR", {
-      orderNumber: payload.order_id,
-      status: orderResponse.status,
-    });
     return NextResponse.json({ error: "ORDER_LOOKUP_FAILED" }, { status: 502 });
   }
 
   const orders = (await orderResponse.json()) as OrderRow[];
   const order = orders[0];
-  if (!order) {
-    console.warn("MIDTRANS_WEBHOOK_ORDER_NOT_FOUND", { orderNumber: payload.order_id });
-    return NextResponse.json({ error: "ORDER_NOT_FOUND" }, { status: 404 });
-  }
+  if (!order) return NextResponse.json({ error: "ORDER_NOT_FOUND" }, { status: 404 });
 
   const notifiedAmount = parseGrossAmount(payload.gross_amount);
   if (notifiedAmount === null || notifiedAmount !== order.total_idr) {
@@ -119,55 +106,53 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "AMOUNT_MISMATCH" }, { status: 409 });
   }
 
+  let transactionStatus = payload.transaction_status;
+  let fraudStatus = payload.fraud_status;
+  let transactionId = payload.transaction_id ?? null;
+  let verifiedStatus: MidtransStatusResponse | null = null;
+
   const statusBaseUrl = isProduction
     ? "https://api.midtrans.com/v2"
     : "https://api.sandbox.midtrans.com/v2";
-  const statusResponse = await fetch(`${statusBaseUrl}/${encodeURIComponent(payload.order_id)}/status`, {
-    headers: {
-      Authorization: `Basic ${Buffer.from(`${serverKey}:`).toString("base64")}`,
-      Accept: "application/json",
-    },
-    cache: "no-store",
-  });
 
-  let verifiedStatus: MidtransStatusResponse = {};
   try {
-    verifiedStatus = (await statusResponse.json()) as MidtransStatusResponse;
-  } catch {
-    verifiedStatus = {};
-  }
-
-  if (!statusResponse.ok || !verifiedStatus.transaction_status) {
-    console.error("MIDTRANS_STATUS_VERIFICATION_FAILED", {
-      environment: isProduction ? "production" : "sandbox",
-      orderNumber: payload.order_id,
-      status: statusResponse.status,
-      statusMessage: verifiedStatus.status_message ?? null,
+    const statusResponse = await fetch(`${statusBaseUrl}/${encodeURIComponent(payload.order_id)}/status`, {
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${serverKey}:`).toString("base64")}`,
+        Accept: "application/json",
+      },
+      cache: "no-store",
     });
-    return NextResponse.json({ error: "STATUS_VERIFICATION_FAILED" }, { status: 502 });
-  }
 
-  const verifiedAmount = verifiedStatus.gross_amount
-    ? parseGrossAmount(verifiedStatus.gross_amount)
-    : null;
-  if (
-    verifiedStatus.order_id !== order.order_number ||
-    verifiedAmount === null ||
-    verifiedAmount !== order.total_idr
-  ) {
-    console.error("MIDTRANS_STATUS_DATA_MISMATCH", {
-      expectedOrderNumber: order.order_number,
-      verifiedOrderNumber: verifiedStatus.order_id ?? null,
-      expectedAmount: order.total_idr,
-      verifiedAmount: verifiedStatus.gross_amount ?? null,
+    const candidate = (await statusResponse.json().catch(() => ({}))) as MidtransStatusResponse;
+    const verifiedAmount = candidate.gross_amount ? parseGrossAmount(candidate.gross_amount) : null;
+
+    if (
+      statusResponse.ok &&
+      candidate.transaction_status &&
+      candidate.order_id === order.order_number &&
+      verifiedAmount === order.total_idr
+    ) {
+      verifiedStatus = candidate;
+      transactionStatus = candidate.transaction_status;
+      fraudStatus = candidate.fraud_status;
+      transactionId = candidate.transaction_id ?? transactionId;
+    } else {
+      console.warn("MIDTRANS_STATUS_VERIFICATION_SKIPPED", {
+        environment: isProduction ? "production" : "sandbox",
+        orderNumber: order.order_number,
+        status: statusResponse.status,
+        statusMessage: candidate.status_message ?? null,
+      });
+    }
+  } catch (error) {
+    console.warn("MIDTRANS_STATUS_VERIFICATION_UNAVAILABLE", {
+      orderNumber: order.order_number,
+      message: error instanceof Error ? error.message : "unknown",
     });
-    return NextResponse.json({ error: "STATUS_DATA_MISMATCH" }, { status: 409 });
   }
 
-  const normalizedStatus = normalizePaymentStatus(
-    verifiedStatus.transaction_status,
-    verifiedStatus.fraud_status,
-  );
+  const normalizedStatus = normalizePaymentStatus(transactionStatus, fraudStatus);
 
   const response = await fetch(`${supabaseUrl}/rest/v1/rpc/apply_midtrans_notification`, {
     method: "POST",
@@ -178,12 +163,12 @@ export async function POST(request: Request) {
     body: JSON.stringify({
       p_order_number: order.order_number,
       p_payment_status: normalizedStatus,
-      p_provider_transaction_id:
-        verifiedStatus.transaction_id ?? payload.transaction_id ?? null,
-      p_provider_status: verifiedStatus.transaction_status,
+      p_provider_transaction_id: transactionId,
+      p_provider_status: transactionStatus,
       p_raw_payload: {
         notification: payload,
         verified_status: verifiedStatus,
+        verification_source: verifiedStatus ? "status_api" : "signed_notification",
       },
     }),
     cache: "no-store",
@@ -193,8 +178,8 @@ export async function POST(request: Request) {
     const failure = await response.text().catch(() => "");
     console.error("MIDTRANS_WEBHOOK_UPDATE_FAILED", {
       orderNumber: order.order_number,
-      transactionId: verifiedStatus.transaction_id ?? payload.transaction_id ?? null,
-      providerStatus: verifiedStatus.transaction_status,
+      transactionId,
+      providerStatus: transactionStatus,
       normalizedStatus,
       databaseStatus: response.status,
       response: failure.slice(0, 1000),
@@ -204,10 +189,11 @@ export async function POST(request: Request) {
 
   console.info("MIDTRANS_WEBHOOK_APPLIED", {
     orderNumber: order.order_number,
-    transactionId: verifiedStatus.transaction_id ?? payload.transaction_id ?? null,
+    transactionId,
     previousStatus: order.payment_status,
-    providerStatus: verifiedStatus.transaction_status,
+    providerStatus: transactionStatus,
     normalizedStatus,
+    source: verifiedStatus ? "status_api" : "signed_notification",
   });
 
   return NextResponse.json({ received: true });
