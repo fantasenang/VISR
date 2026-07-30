@@ -36,9 +36,36 @@ function cartFromItems(items: Array<{ sku: string; quantity: number }>) {
   return { carryQty, haloQty, linkQty };
 }
 
+function validationMessage(path: PropertyKey[], fallback: string) {
+  const field = String(path[0] ?? "");
+  if (field === "customer") {
+    const customerField = String(path[1] ?? "");
+    if (customerField === "address") return "Enter a complete street address of at least 10 characters.";
+    if (customerField === "whatsapp") return "Enter WhatsApp in Indonesian format starting with 62.";
+    if (customerField === "email") return "Enter a valid email address.";
+    if (customerField === "fullName") return "Enter your full name.";
+  }
+  if (field === "shipping") return "The selected shipping service is no longer valid. Return to Edit Information and select it again.";
+  return fallback || "Please check your order information and try again.";
+}
+
 export async function POST(request: Request) {
   const parsed = reservationSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "INVALID_ORDER", details: parsed.error.flatten() }, { status: 400 });
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    console.warn("INVALID_ORDER_VALIDATION", {
+      path: issue?.path,
+      message: issue?.message,
+    });
+    return NextResponse.json(
+      {
+        error: validationMessage(issue?.path ?? [], issue?.message ?? "Please check your order information and try again."),
+        code: "INVALID_ORDER",
+        details: parsed.error.flatten(),
+      },
+      { status: 400 },
+    );
+  }
 
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
