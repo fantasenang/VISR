@@ -34,13 +34,12 @@ export const shippingSelectionSchema = z.object({
   destinationId: z.coerce.number().int().positive(),
   destinationLabel: z.string().trim().min(3).max(200),
   courier: z.enum(["jne", "jnt"]),
-  service: z.enum(["REG", "YES", "NDD"]),
+  // RajaOngkir returns route-specific services such as CTC and CTCYES.
+  // The selected service is revalidated against a fresh server-side quote
+  // before the reservation is created, so validation should not hard-code
+  // a small list of service names here.
+  service: z.string().trim().min(1).max(40).regex(/^[A-Z0-9_-]+$/, "Invalid courier service"),
   quotedCostIdr: z.coerce.number().int().positive().max(5_000_000),
-}).superRefine((shipping, context) => {
-  const valid = shipping.courier === "jne"
-    ? shipping.service === "REG" || shipping.service === "YES"
-    : shipping.service === "REG" || shipping.service === "NDD";
-  if (!valid) context.addIssue({ code: "custom", message: "Unsupported courier service", path: ["service"] });
 });
 
 export const reservationSchema = z
