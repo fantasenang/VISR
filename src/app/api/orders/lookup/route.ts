@@ -43,6 +43,14 @@ type ShipmentRow = {
   delivered_at: string | null;
 };
 
+type MidtransStatusResponse = {
+  order_id?: string;
+  gross_amount?: string;
+  transaction_id?: string;
+  transaction_status?: string;
+  fraud_status?: string;
+};
+
 function normalizeOrderNumber(value: string) {
   return value.trim().toUpperCase();
 }
@@ -59,10 +67,7 @@ function normalizePhone(value: string) {
 }
 
 function contactMatches(order: OrderRow, contact: string) {
-  const normalizedEmail = normalizeEmail(contact);
-  const normalizedPhone = normalizePhone(contact);
-
-  return normalizeEmail(order.email) === normalizedEmail || normalizePhone(order.whatsapp) === normalizedPhone;
+  return normalizeEmail(order.email) === normalizeEmail(contact) || normalizePhone(order.whatsapp) === normalizePhone(contact);
 }
 
 function supabaseHeaders(serviceRoleKey: string) {
@@ -70,6 +75,112 @@ function supabaseHeaders(serviceRoleKey: string) {
     apikey: serviceRoleKey,
     Authorization: `Bearer ${serviceRoleKey}`,
   };
+}
+
+function normalizedPaymentStatus(transactionStatus: string, fraudStatus?: string) {
+  if (transactionStatus === "settlement") return "paid" as const;
+  if (transactionStatus === "capture" && fraudStatus === "accept") return "paid" as const;
+  if (["expire", "cancel", "deny"].includes(transactionStatus)) return "expired" as const;
+  return "pending" as const;
+}
+
+async function reconcilePendingOrder(
+  order: OrderRow,
+  supabaseUrl: string,
+  serviceRoleKey: string,
+) {
+  if (order.payment_status !== "pending") return order;
+
+  const serverKey = process.env.MIDTRANS_SERVER_KEY;
+  if (!serverKey) return order;
+
+  const isProduction = process.env.MIDTRANS_IS_PRODUCTION === "true";
+  const statusBaseUrl = isProduction
+    ? "https://api.midtrans.com/v2"
+    : "https://api.sandbox.midtrans.com/v2";
+
+  try {
+    const statusResponse = await fetch(
+      `${statusBaseUrl}/${encodeURIComponent(order.order_number)}/status`,
+      {
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${serverKey}:`).toString("base64")}`,
+          Accept: "application/json",
+        },
+        cache: "no-store",
+      },
+    );
+
+    if (!statusResponse.ok) return order;
+
+    const status = (await statusResponse.json()) as MidtransStatusResponse;
+    const grossAmount = Number(status.gross_amount);
+    if (
+      status.order_id !== order.order_number ||
+      !Number.isFinite(grossAmount) ||
+      grossAmount !== order.total_idr ||
+      !status.transaction_status
+    ) {
+      console.warn("MIDTRANS_LOOKUP_RECONCILIATION_MISMATCH", {
+        orderNumber: order.order_number,
+        providerOrderNumber: status.order_id ?? null,
+        expectedAmount: order.total_idr,
+        providerAmount: status.gross_amount ?? null,
+      });
+      return order;
+    }
+
+    const paymentStatus = normalizedPaymentStatus(status.transaction_status, status.fraud_status);
+    if (paymentStatus === "pending") return order;
+
+    const databaseHeaders = supabaseHeaders(serviceRoleKey);
+    const applyResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/apply_midtrans_notification`, {
+      method: "POST",
+      headers: {
+        ...databaseHeaders,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        p_order_number: order.order_number,
+        p_payment_status: paymentStatus,
+        p_provider_transaction_id: status.transaction_id ?? null,
+        p_provider_status: status.transaction_status,
+        p_raw_payload: {
+          source: "order_lookup_reconciliation",
+          verified_status: status,
+        },
+      }),
+      cache: "no-store",
+    });
+
+    if (!applyResponse.ok) {
+      console.error("MIDTRANS_LOOKUP_RECONCILIATION_FAILED", {
+        orderNumber: order.order_number,
+        providerStatus: status.transaction_status,
+        databaseStatus: applyResponse.status,
+      });
+      return order;
+    }
+
+    console.info("MIDTRANS_LOOKUP_RECONCILED", {
+      orderNumber: order.order_number,
+      providerStatus: status.transaction_status,
+      paymentStatus,
+    });
+
+    return {
+      ...order,
+      payment_status: paymentStatus,
+      fulfillment_status: paymentStatus === "paid" ? "confirmed" : order.fulfillment_status,
+      paid_at: paymentStatus === "paid" ? order.paid_at ?? new Date().toISOString() : order.paid_at,
+    };
+  } catch (error) {
+    console.error("MIDTRANS_LOOKUP_RECONCILIATION_ERROR", {
+      orderNumber: order.order_number,
+      message: error instanceof Error ? error.message : "UNKNOWN_ERROR",
+    });
+    return order;
+  }
 }
 
 export async function POST(request: Request) {
@@ -83,31 +194,28 @@ export async function POST(request: Request) {
 
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
   if (!supabaseUrl || !serviceRoleKey) {
     return NextResponse.json({ error: "COMMERCE_NOT_CONFIGURED" }, { status: 503 });
   }
 
+  const databaseHeaders = supabaseHeaders(serviceRoleKey);
   const orderQuery = new URL(`${supabaseUrl}/rest/v1/orders`);
   orderQuery.searchParams.set("select", "id,order_number,batch_code,customer_name,email,whatsapp,address_line,province,city,postal_code,subtotal_idr,shipping_cost_idr,total_idr,payment_status,fulfillment_status,payment_expires_at,paid_at,created_at");
   orderQuery.searchParams.set("order_number", `eq.${orderNumber}`);
   orderQuery.searchParams.set("limit", "1");
 
-  const orderResponse = await fetch(orderQuery, {
-    headers: supabaseHeaders(serviceRoleKey),
-    cache: "no-store",
-  });
-
+  const orderResponse = await fetch(orderQuery, { headers: databaseHeaders, cache: "no-store" });
   if (!orderResponse.ok) {
     return NextResponse.json({ error: "ORDER_LOOKUP_FAILED" }, { status: 502 });
   }
 
   const orders = (await orderResponse.json()) as OrderRow[];
-  const order = orders[0];
-
-  if (!order || !contactMatches(order, contact)) {
+  const foundOrder = orders[0];
+  if (!foundOrder || !contactMatches(foundOrder, contact)) {
     return NextResponse.json({ error: "ORDER_NOT_FOUND" }, { status: 404 });
   }
+
+  const order = await reconcilePendingOrder(foundOrder, supabaseUrl, serviceRoleKey);
 
   const itemsQuery = new URL(`${supabaseUrl}/rest/v1/order_items`);
   itemsQuery.searchParams.set("select", "sku,product_name,variant_name,quantity,unit_price_idr,line_total_idr");
@@ -120,8 +228,8 @@ export async function POST(request: Request) {
   shipmentQuery.searchParams.set("limit", "1");
 
   const [itemsResponse, shipmentResponse] = await Promise.all([
-    fetch(itemsQuery, { headers: supabaseHeaders(serviceRoleKey), cache: "no-store" }),
-    fetch(shipmentQuery, { headers: supabaseHeaders(serviceRoleKey), cache: "no-store" }),
+    fetch(itemsQuery, { headers: databaseHeaders, cache: "no-store" }),
+    fetch(shipmentQuery, { headers: databaseHeaders, cache: "no-store" }),
   ]);
 
   if (!itemsResponse.ok || !shipmentResponse.ok) {
