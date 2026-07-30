@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { calculateStackedPackage, formatRupiah, haloVariants, products } from "@/lib/commerce/catalog";
 import { CustomerInformation, customerInformationSchema, normalizeWhatsApp } from "@/lib/commerce/customer-schema";
 
@@ -54,6 +54,10 @@ export function CheckoutClient() {
   const [paymentError, setPaymentError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPaying, setIsPaying] = useState(false);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+  }, [step]);
 
   const selectedHalo = haloVariants.filter((variant) => halo[variant.id]);
   const subtotal = carryQty * products.carry.price + selectedHalo.length * products.halo.price + linkQty * products.additionalLink.price;
@@ -164,11 +168,11 @@ export function CheckoutClient() {
         <div className="mt-12 grid gap-14 lg:grid-cols-[1.15fr_0.85fr]">
           <section>
             <p className="visr-label text-white/42">Reserve Your VISR</p>
-            <h1 className="mt-5 max-w-[11ch] text-[clamp(3.5rem,8vw,7.5rem)] font-normal leading-[0.9] tracking-[-0.06em]">
-              {step === "products" ? "Build your Batch 2 reservation." : step === "information" ? "Where should your VISR go?" : step === "review" ? "Review your reservation." : "Welcome to Batch 2."}
+            <h1 className="mt-5 max-w-[13ch] text-[clamp(2.75rem,6vw,5.5rem)] font-normal leading-[0.94] tracking-[-0.055em]">
+              {step === "products" ? "Curate your Batch 2." : step === "information" ? "Delivery details." : step === "review" ? "Final review." : "Your VISR is reserved."}
             </h1>
 
-            {step === "products" && <div className="mt-16 border-t border-white/10">
+            {step === "products" && <div className="mt-14 border-t border-white/10">
               <article className="grid gap-7 border-b border-white/10 py-9 md:grid-cols-[1fr_auto] md:items-center">
                 <div><p className="text-2xl">VISR Carry Gen 2</p><p className="mt-2 text-sm text-white/45">Includes one VISR Link, new strap and premium packaging.</p><p className="mt-4">{formatRupiah(products.carry.price)}</p></div>
                 <QuantityControl value={carryQty} min={0} max={products.carry.maxPerOrder} onChange={setCarryQty} />
@@ -183,7 +187,7 @@ export function CheckoutClient() {
               </article>
             </div>}
 
-            {step === "information" && <form onSubmit={continueToReview} className="mt-14 grid gap-6 sm:grid-cols-2">
+            {step === "information" && <form onSubmit={continueToReview} className="mt-12 grid gap-6 sm:grid-cols-2">
               <div className="sm:col-span-2"><Field label="Full name" name="fullName" value={customer.fullName} error={errors.fullName} onChange={updateCustomer} /></div>
               <Field label="WhatsApp number" name="whatsapp" value={customer.whatsapp} error={errors.whatsapp} onChange={updateCustomer} />
               <Field label="Email" name="email" value={customer.email} error={errors.email} onChange={updateCustomer} />
@@ -197,13 +201,13 @@ export function CheckoutClient() {
               <div className="sm:col-span-2 flex gap-3"><button type="button" onClick={() => setStep("products")} className="rounded-full border border-white/15 px-6 py-4 text-sm">Back</button><button type="submit" className="flex-1 rounded-full bg-white px-6 py-4 text-sm font-medium text-black">Continue to Review</button></div>
             </form>}
 
-            {step === "review" && <div className="mt-14 space-y-8">
+            {step === "review" && <div className="mt-12 space-y-8">
               <div className="rounded-[2rem] border border-white/10 p-7"><p className="visr-label text-white/40">Customer</p><p className="mt-5 text-xl">{customer.fullName}</p><p className="mt-2 text-sm leading-6 text-white/50">+{customer.whatsapp}<br />{customer.email}<br />{customer.address}, {customer.city}, {customer.province} {customer.postalCode}</p>{customer.orderNotes && <p className="mt-4 text-sm text-white/40">Note: {customer.orderNotes}</p>}</div>
               {submitError && <div className="rounded-2xl border border-red-400/30 bg-red-400/10 p-5 text-sm leading-6 text-red-200">{submitError}</div>}
               <div className="flex gap-3"><button type="button" onClick={() => setStep("information")} disabled={isSubmitting} className="rounded-full border border-white/15 px-6 py-4 text-sm disabled:opacity-40">Edit Information</button><button type="button" onClick={createReservation} disabled={isSubmitting} className="flex-1 rounded-full bg-white px-6 py-4 text-sm font-medium text-black disabled:cursor-wait disabled:opacity-55">{isSubmitting ? "Reserving stock…" : "Create Reservation"}</button></div>
             </div>}
 
-            {step === "reserved" && reservation && <div className="mt-14 rounded-[2rem] border border-white/12 bg-white/[0.035] p-7 md:p-10">
+            {step === "reserved" && reservation && <div className="mt-12 rounded-[2rem] border border-white/12 bg-white/[0.035] p-7 md:p-10">
               <p className="visr-label text-white/40">Reservation Confirmed</p>
               <p className="mt-6 text-sm text-white/45">Your order number</p>
               <p className="mt-2 break-all text-2xl tracking-[-0.03em] md:text-4xl">{reservation.orderNumber}</p>
