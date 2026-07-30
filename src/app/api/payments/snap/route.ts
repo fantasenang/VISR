@@ -26,6 +26,14 @@ type ItemRow = {
   unit_price_idr: number;
 };
 
+type MidtransSnapResponse = {
+  token?: string;
+  redirect_url?: string;
+  status_code?: string;
+  status_message?: string;
+  error_messages?: string[];
+};
+
 export async function POST(request: Request) {
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
@@ -38,7 +46,16 @@ export async function POST(request: Request) {
   const isProduction = process.env.MIDTRANS_IS_PRODUCTION === "true";
 
   if (!supabaseUrl || !serviceRoleKey || !serverKey) {
-    return NextResponse.json({ error: "PAYMENT_NOT_CONFIGURED" }, { status: 503 });
+    console.error("MIDTRANS_CONFIGURATION_ERROR", {
+      hasSupabaseUrl: Boolean(supabaseUrl),
+      hasServiceRoleKey: Boolean(serviceRoleKey),
+      hasServerKey: Boolean(serverKey),
+      isProduction,
+    });
+    return NextResponse.json(
+      { error: "Payment service is not configured yet. Your reservation remains active." },
+      { status: 503 },
+    );
   }
 
   const headers = {
@@ -52,7 +69,14 @@ export async function POST(request: Request) {
   ]);
 
   if (!orderResponse.ok || !itemsResponse.ok) {
-    return NextResponse.json({ error: "ORDER_LOOKUP_FAILED" }, { status: 502 });
+    console.error("MIDTRANS_ORDER_LOOKUP_ERROR", {
+      orderStatus: orderResponse.status,
+      itemsStatus: itemsResponse.status,
+    });
+    return NextResponse.json(
+      { error: "We could not prepare your payment. Your reservation remains active." },
+      { status: 502 },
+    );
   }
 
   const orders = (await orderResponse.json()) as OrderRow[];
@@ -110,9 +134,30 @@ export async function POST(request: Request) {
     cache: "no-store",
   });
 
-  const payload = await midtransResponse.json().catch(() => ({}));
-  if (!midtransResponse.ok) {
-    return NextResponse.json({ error: "MIDTRANS_SNAP_FAILED", details: payload }, { status: 502 });
+  const raw = await midtransResponse.text();
+  let payload: MidtransSnapResponse = {};
+  try {
+    payload = raw ? (JSON.parse(raw) as MidtransSnapResponse) : {};
+  } catch {
+    payload = {};
+  }
+
+  if (!midtransResponse.ok || !payload.token) {
+    console.error("MIDTRANS_API_ERROR", {
+      environment: isProduction ? "production" : "sandbox",
+      status: midtransResponse.status,
+      statusText: midtransResponse.statusText,
+      orderNumber: order.order_number,
+      grossAmount,
+      response: raw.slice(0, 2000),
+    });
+
+    return NextResponse.json(
+      {
+        error: "Payment service is temporarily unavailable. Your reservation remains active. Please try again in a few minutes.",
+      },
+      { status: 502 },
+    );
   }
 
   return NextResponse.json({ token: payload.token, redirectUrl: payload.redirect_url });
