@@ -8,6 +8,14 @@ const FRIENDLY_ERRORS: Record<string, string> = {
   RAJAONGKIR_NOT_CONFIGURED: "Layanan ongkir sementara belum tersedia.",
 };
 
+const STEP_BUTTON_LABELS = new Set([
+  "Continue to Information",
+  "Back",
+  "Review Reservation",
+  "Edit Information",
+  "Create Reservation",
+]);
+
 function polishCheckout() {
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   let node = walker.nextNode();
@@ -55,12 +63,28 @@ export default function CheckoutPolish() {
       frame = window.requestAnimationFrame(polishCheckout);
     };
 
+    const handleStepClick = (event: MouseEvent) => {
+      const button = (event.target as HTMLElement | null)?.closest("button");
+      if (!button || button.disabled) return;
+
+      const label = button.textContent?.trim() ?? "";
+      if (!STEP_BUTTON_LABELS.has(label)) return;
+
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+        });
+      });
+    };
+
     schedule();
     const observer = new MutationObserver(schedule);
     observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    document.addEventListener("click", handleStepClick);
 
     return () => {
       observer.disconnect();
+      document.removeEventListener("click", handleStepClick);
       window.cancelAnimationFrame(frame);
     };
   }, []);
