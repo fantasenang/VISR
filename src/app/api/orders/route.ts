@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { reservationSchema } from "@/lib/commerce/order-schema";
 import { haloVariants, products } from "@/lib/commerce/catalog";
@@ -14,6 +15,19 @@ type ShippingResult = {
   shipping_cost_idr: number;
   total_idr: number;
 };
+
+type ApiResult = {
+  status: number;
+  body: Record<string, unknown>;
+};
+
+type CachedReservation = {
+  expiresAt: number;
+  promise: Promise<ApiResult>;
+};
+
+const RESERVATION_CACHE_TTL_MS = 5 * 60 * 1000;
+const reservationCache = new Map<string, CachedReservation>();
 
 async function resolveOriginId() {
   const configured = Number(process.env.RAJAONGKIR_ORIGIN_ID);
@@ -49,53 +63,46 @@ function validationMessage(path: PropertyKey[], fallback: string) {
   return fallback || "Please check your order information and try again.";
 }
 
-export async function POST(request: Request) {
-  const parsed = reservationSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    console.warn("INVALID_ORDER_VALIDATION", {
-      path: issue?.path,
-      message: issue?.message,
-    });
-    return NextResponse.json(
-      {
-        error: validationMessage(issue?.path ?? [], issue?.message ?? "Please check your order information and try again."),
-        code: "INVALID_ORDER",
-        details: parsed.error.flatten(),
-      },
-      { status: 400 },
-    );
-  }
+function reservationFingerprint(value: unknown) {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
 
+function pruneReservationCache(now: number) {
+  for (const [key, entry] of reservationCache) {
+    if (entry.expiresAt <= now) reservationCache.delete(key);
+  }
+}
+
+async function createReservation(parsedData: typeof reservationSchema._output): Promise<ApiResult> {
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!supabaseUrl || !serviceRoleKey) return NextResponse.json({ error: "COMMERCE_NOT_CONFIGURED" }, { status: 503 });
+  if (!supabaseUrl || !serviceRoleKey) return { status: 503, body: { error: "COMMERCE_NOT_CONFIGURED" } };
 
   const headers = { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}`, "Content-Type": "application/json" };
 
   try {
-    const cart = cartFromItems(parsed.data.items);
+    const cart = cartFromItems(parsedData.items);
     const profile = getPackingProfile(cart);
     const originId = await resolveOriginId();
-    const selectedCourier = parsed.data.shipping.courier;
+    const selectedCourier = parsedData.shipping.courier;
     const weight = getChargeableWeightGrams(profile, selectedCourier);
     const liveRates = await calculateDomesticRates({
       originId,
-      destinationId: parsed.data.shipping.destinationId,
+      destinationId: parsedData.shipping.destinationId,
       weightGrams: weight.chargeableWeightGrams,
       couriers: [selectedCourier],
     });
 
-    const liveRate = liveRates.find((rate) => rate.courierCode === selectedCourier && rate.service === parsed.data.shipping.service);
-    if (!liveRate) return NextResponse.json({ error: "SHIPPING_SERVICE_UNAVAILABLE" }, { status: 409 });
-    if (liveRate.costIdr !== parsed.data.shipping.quotedCostIdr) {
-      return NextResponse.json({ error: "SHIPPING_RATE_CHANGED", currentCostIdr: liveRate.costIdr }, { status: 409 });
+    const liveRate = liveRates.find((rate) => rate.courierCode === selectedCourier && rate.service === parsedData.shipping.service);
+    if (!liveRate) return { status: 409, body: { error: "SHIPPING_SERVICE_UNAVAILABLE" } };
+    if (liveRate.costIdr !== parsedData.shipping.quotedCostIdr) {
+      return { status: 409, body: { error: "SHIPPING_RATE_CHANGED", currentCostIdr: liveRate.costIdr } };
     }
 
     const reservationResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/reserve_visr_order`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ customer: parsed.data.customer, requested_items: parsed.data.items }),
+      body: JSON.stringify({ customer: parsedData.customer, requested_items: parsedData.items }),
       cache: "no-store",
     });
 
@@ -103,12 +110,12 @@ export async function POST(request: Request) {
       const failure = await reservationResponse.json().catch(() => ({}));
       const message = typeof failure.message === "string" ? failure.message : "ORDER_CREATION_FAILED";
       const normalized = message.toUpperCase();
-      return NextResponse.json({ error: message }, { status: normalized.includes("STOCK") ? 409 : normalized.includes("LIMIT") ? 400 : 500 });
+      return { status: normalized.includes("STOCK") ? 409 : normalized.includes("LIMIT") ? 400 : 500, body: { error: message } };
     }
 
     const payload = (await reservationResponse.json()) as ReservationResult[] | ReservationResult;
     const reservation = Array.isArray(payload) ? payload[0] : payload;
-    if (!reservation?.order_number || !reservation.order_id) return NextResponse.json({ error: "INVALID_RESERVATION_RESPONSE" }, { status: 502 });
+    if (!reservation?.order_number || !reservation.order_id) return { status: 502, body: { error: "INVALID_RESERVATION_RESPONSE" } };
 
     const shippingResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/apply_visr_shipping`, {
       method: "POST",
@@ -128,24 +135,63 @@ export async function POST(request: Request) {
     });
 
     if (!shippingResponse.ok) {
-      const failure = await shippingResponse.json().catch(() => ({}));
-      return NextResponse.json({ error: "SHIPPING_PERSISTENCE_FAILED", details: failure }, { status: 502 });
+      console.error("SHIPPING_PERSISTENCE_FAILED", { orderId: reservation.order_id, status: shippingResponse.status });
+      return { status: 502, body: { error: "SHIPPING_PERSISTENCE_FAILED" } };
     }
 
     const shippingPayload = (await shippingResponse.json()) as ShippingResult[] | ShippingResult;
     const shipping = Array.isArray(shippingPayload) ? shippingPayload[0] : shippingPayload;
-    if (!shipping) return NextResponse.json({ error: "INVALID_SHIPPING_RESPONSE" }, { status: 502 });
+    if (!shipping) return { status: 502, body: { error: "INVALID_SHIPPING_RESPONSE" } };
 
-    return NextResponse.json({
-      orderId: reservation.order_id,
-      orderNumber: reservation.order_number,
-      expiresAt: reservation.expires_at,
-      shippingCostIdr: shipping.shipping_cost_idr,
-      totalIdr: shipping.total_idr,
-    }, { status: 201 });
+    return {
+      status: 201,
+      body: {
+        orderId: reservation.order_id,
+        orderNumber: reservation.order_number,
+        expiresAt: reservation.expires_at,
+        shippingCostIdr: shipping.shipping_cost_idr,
+        totalIdr: shipping.total_idr,
+      },
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : "ORDER_CREATION_FAILED";
     const status = message === "RAJAONGKIR_NOT_CONFIGURED" ? 503 : message === "RAJAONGKIR_RATE_LIMITED" ? 429 : 502;
-    return NextResponse.json({ error: message }, { status });
+    return { status, body: { error: message } };
   }
+}
+
+export async function POST(request: Request) {
+  const parsed = reservationSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    console.warn("INVALID_ORDER_VALIDATION", { path: issue?.path, message: issue?.message });
+    return NextResponse.json(
+      {
+        error: validationMessage(issue?.path ?? [], issue?.message ?? "Please check your order information and try again."),
+        code: "INVALID_ORDER",
+        details: parsed.error.flatten(),
+      },
+      { status: 400 },
+    );
+  }
+
+  const now = Date.now();
+  pruneReservationCache(now);
+  const key = reservationFingerprint(parsed.data);
+  const existing = reservationCache.get(key);
+  const replayed = Boolean(existing);
+  const promise = existing?.promise ?? createReservation(parsed.data);
+
+  if (!existing) {
+    reservationCache.set(key, { expiresAt: now + RESERVATION_CACHE_TTL_MS, promise });
+    void promise.then((result) => {
+      if (result.status < 200 || result.status >= 300) reservationCache.delete(key);
+    });
+  }
+
+  const result = await promise;
+  return NextResponse.json(result.body, {
+    status: result.status,
+    headers: replayed ? { "Idempotency-Replayed": "true" } : undefined,
+  });
 }
