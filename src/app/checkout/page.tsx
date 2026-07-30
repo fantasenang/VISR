@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import CheckoutClient from "./checkout-client";
+import CheckoutPolish from "./checkout-polish";
 import { haloVariants, products } from "@/lib/commerce/catalog";
 
 export const metadata: Metadata = {
@@ -44,5 +45,10 @@ const checkoutProducts = {
 };
 
 export default function CheckoutPage() {
-  return <CheckoutClient products={checkoutProducts} />;
+  return (
+    <>
+      <CheckoutClient products={checkoutProducts} />
+      <CheckoutPolish />
+    </>
+  );
 }
