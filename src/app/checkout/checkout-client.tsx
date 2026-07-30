@@ -100,6 +100,8 @@ export default function CheckoutClient({ products }: { products: CheckoutProduct
   }
 
   useEffect(() => {
+    if (step !== "information") return;
+
     const postalCode = customer.postalCode;
     setSelectedDestination(null);
     setDestinationOptions([]);
@@ -108,7 +110,7 @@ export default function CheckoutClient({ products }: { products: CheckoutProduct
     setCustomer((current) => ({ ...current, province: "", city: "" }));
     setShippingError("");
 
-    if (step !== "information" || !/^\d{5}$/.test(postalCode)) return;
+    if (!/^\d{5}$/.test(postalCode)) return;
 
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
