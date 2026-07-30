@@ -6,6 +6,7 @@ import { CustomerInformation, customerInformationSchema, normalizeWhatsApp } fro
 
 type HaloSelection = Record<string, boolean>;
 type CheckoutStep = "products" | "information" | "review" | "reserved";
+type PaymentReturn = "finish" | "pending" | "error";
 type FieldErrors = Partial<Record<keyof CustomerInformation, string>>;
 type ReservationResult = { orderId: string; orderNumber: string; expiresAt: string };
 
@@ -44,6 +45,8 @@ function Field({ label, name, value, error, multiline = false, required = true, 
 
 export function CheckoutClient() {
   const [step, setStep] = useState<CheckoutStep>("products");
+  const [paymentReturn, setPaymentReturn] = useState<PaymentReturn | null>(null);
+  const [paymentOrderNumber, setPaymentOrderNumber] = useState("");
   const [carryQty, setCarryQty] = useState(1);
   const [linkQty, setLinkQty] = useState(0);
   const [halo, setHalo] = useState<HaloSelection>({});
@@ -56,8 +59,17 @@ export function CheckoutClient() {
   const [isPaying, setIsPaying] = useState(false);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("payment");
+    if (status === "finish" || status === "pending" || status === "error") {
+      setPaymentReturn(status);
+      setPaymentOrderNumber(params.get("order_id") ?? "");
+    }
+  }, []);
+
+  useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
-  }, [step]);
+  }, [step, paymentReturn]);
 
   const selectedHalo = haloVariants.filter((variant) => halo[variant.id]);
   const subtotal = carryQty * products.carry.price + selectedHalo.length * products.halo.price + linkQty * products.additionalLink.price;
@@ -153,6 +165,57 @@ export function CheckoutClient() {
       setIsPaying(false);
     }
   };
+
+  if (paymentReturn) {
+    const content = paymentReturn === "finish"
+      ? {
+          eyebrow: "Payment received",
+          title: "Your VISR is secured.",
+          body: "Thank you. Midtrans has returned your payment result and our server is verifying the final status. You will receive the next order update through email or WhatsApp.",
+          note: "Please keep your payment receipt until the order confirmation arrives.",
+        }
+      : paymentReturn === "pending"
+        ? {
+            eyebrow: "Payment pending",
+            title: "Your reservation is still held.",
+            body: "Your payment has not been completed yet. Follow the instructions from Midtrans before the reservation deadline to secure your VISR.",
+            note: "Bank transfers and some payment methods may need additional processing time.",
+          }
+        : {
+            eyebrow: "Payment incomplete",
+            title: "Your payment was not completed.",
+            body: "No successful payment was recorded from this attempt. You can return to checkout and create a new payment attempt while stock remains available.",
+            note: "Your bank or payment provider may temporarily hold a failed authorization.",
+          };
+
+    return (
+      <main className="min-h-screen bg-black text-white">
+        <div className="visr-container flex min-h-screen flex-col py-12 md:py-20">
+          <a href="/" className="visr-label text-white/45">← Back to exhibition</a>
+          <div className="my-auto max-w-3xl py-20">
+            <p className="visr-label text-white/42">{content.eyebrow}</p>
+            <h1 className="mt-5 max-w-[13ch] text-[clamp(3rem,7vw,6rem)] font-normal leading-[0.94] tracking-[-0.055em]">
+              {content.title}
+            </h1>
+            <div className="mt-12 rounded-[2rem] border border-white/12 bg-white/[0.035] p-7 md:p-10">
+              {paymentOrderNumber && (
+                <>
+                  <p className="visr-label text-white/40">Order number</p>
+                  <p className="mt-4 break-all text-2xl tracking-[-0.03em] md:text-4xl">{paymentOrderNumber}</p>
+                </>
+              )}
+              <p className={`${paymentOrderNumber ? "mt-8" : ""} max-w-2xl text-sm leading-7 text-white/58`}>{content.body}</p>
+              <p className="mt-6 text-xs leading-5 text-white/35">{content.note}</p>
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                {paymentReturn !== "finish" && <a href="/checkout" className="rounded-full bg-white px-6 py-4 text-center text-sm font-medium !text-black">Return to checkout</a>}
+                <a href="/" className="rounded-full border border-white/15 px-6 py-4 text-center text-sm text-white/75">Back to exhibition</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-black text-white">
