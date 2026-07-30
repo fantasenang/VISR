@@ -46,9 +46,14 @@ export default function HomePage() {
       </section>
 
       <footer className="border-t border-white/[0.07] py-8">
-        <div className="visr-container flex flex-col gap-4 text-xs text-white/35 md:flex-row md:items-center md:justify-between">
-          <span className="tracking-[0.16em]">VISR</span>
-          <span>Digital Exhibition / Link, Carry & Halo</span>
+        <div className="visr-container flex flex-col gap-5 text-xs text-white/35 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-6">
+            <span className="tracking-[0.16em]">VISR</span>
+            <span>Digital Exhibition / Link, Carry & Halo</span>
+          </div>
+          <a href="/order" className="w-fit text-white/55 transition hover:text-white">
+            View Order →
+          </a>
         </div>
       </footer>
     </main>
