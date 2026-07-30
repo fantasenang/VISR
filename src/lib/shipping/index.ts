@@ -6,10 +6,11 @@ export type CheckoutCourier = "jne" | "jnt";
 export type ShippingDestination = {
   id: number;
   label: string;
-  province: string;
-  city: string;
-  district?: string;
-  postalCode?: string;
+  provinceName: string;
+  cityName: string;
+  districtName: string;
+  subdistrictName: string;
+  zipCode: string;
 };
 
 export type ShippingRate = {
@@ -27,11 +28,7 @@ export function calculatePacking(input: {
   haloQty: number;
   additionalLinkQty: number;
 }) {
-  const carryQty = Math.max(0, Math.floor(input.carryQty || 0));
-  const haloQty = Math.max(0, Math.floor(input.haloQty || 0));
-  const linkQty = Math.max(0, Math.floor(input.additionalLinkQty || 0));
-
-  if (carryQty + haloQty + linkQty === 0) {
+  if (input.carryQty + input.haloQty + input.additionalLinkQty === 0) {
     return {
       carryQty: 0,
       haloQty: 0,
@@ -44,7 +41,11 @@ export function calculatePacking(input: {
     };
   }
 
-  return getPackingProfile({ carryQty, haloQty, linkQty });
+  return getPackingProfile({
+    carryQty: input.carryQty,
+    haloQty: input.haloQty,
+    linkQty: input.additionalLinkQty,
+  });
 }
 
 export function courierLabel(rate: ShippingRate) {
