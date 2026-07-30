@@ -17,6 +17,11 @@ const STEP_BUTTON_LABELS = new Set([
 ]);
 
 function polishCheckout() {
+  document.querySelectorAll<HTMLElement>("input, textarea, select").forEach((field) => {
+    // Mobile Safari automatically zooms focused form controls smaller than 16px.
+    field.style.fontSize = "16px";
+  });
+
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   let node = walker.nextNode();
 
@@ -69,6 +74,10 @@ export default function CheckoutPolish() {
 
       const label = button.textContent?.trim() ?? "";
       if (!STEP_BUTTON_LABELS.has(label)) return;
+
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
 
       window.requestAnimationFrame(() => {
         window.requestAnimationFrame(() => {
