@@ -188,7 +188,7 @@ export function OrderLookupClient() {
         ) : (
           <div className="py-16 md:py-24">
             <p className="visr-label text-white/42">{order.batchCode} order</p>
-            <h1 className="mt-5 break-all text-[clamp(2.7rem,7vw,6rem)] font-normal leading-[0.94] tracking-[-0.055em]">{order.orderNumber}</h1>
+            <h1 className="mt-5 max-w-full break-words text-[clamp(2rem,5.2vw,4.75rem)] font-normal leading-[1.02] tracking-[-0.045em] [overflow-wrap:anywhere]">{order.orderNumber}</h1>
             <p className="mt-6 max-w-xl text-sm leading-7 text-white/50">This page follows your VISR from reservation through production and delivery.</p>
 
             <div className="mt-14 grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
