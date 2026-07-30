@@ -27,11 +27,24 @@ export function calculatePacking(input: {
   haloQty: number;
   additionalLinkQty: number;
 }) {
-  return getPackingProfile({
-    carryQty: input.carryQty,
-    haloQty: input.haloQty,
-    linkQty: input.additionalLinkQty,
-  });
+  const carryQty = Math.max(0, Math.floor(input.carryQty || 0));
+  const haloQty = Math.max(0, Math.floor(input.haloQty || 0));
+  const linkQty = Math.max(0, Math.floor(input.additionalLinkQty || 0));
+
+  if (carryQty + haloQty + linkQty === 0) {
+    return {
+      carryQty: 0,
+      haloQty: 0,
+      linkQty: 0,
+      lengthCm: 0,
+      widthCm: 0,
+      heightCm: 0,
+      actualWeightGrams: 0,
+      volumeCm3: 0,
+    };
+  }
+
+  return getPackingProfile({ carryQty, haloQty, linkQty });
 }
 
 export function courierLabel(rate: ShippingRate) {
