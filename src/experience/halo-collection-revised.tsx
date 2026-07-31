@@ -395,19 +395,20 @@ export function HaloCollection() {
 
         .halo-light__spotlight {
           z-index: 0;
-          top: -8%;
+          top: -10%;
           left: 50%;
-          width: 38%;
-          height: 58%;
+          width: 54%;
+          height: 76%;
           background: linear-gradient(
             180deg,
-            rgb(255 255 255 / 0.1) 0%,
-            rgb(255 255 255 / 0.04) 34%,
-            transparent 82%
+            rgb(255 255 255 / 0.18) 0%,
+            rgb(255 255 255 / 0.1) 18%,
+            rgb(255 255 255 / 0.05) 46%,
+            transparent 88%
           );
-          clip-path: polygon(42% 0, 58% 0, 75% 100%, 25% 100%);
-          filter: blur(15px);
-          opacity: 0.22;
+          clip-path: polygon(39% 0, 61% 0, 84% 100%, 16% 100%);
+          filter: blur(22px);
+          opacity: 0.3;
           transform: translate3d(-50%, 0, 0);
           mix-blend-mode: screen;
           animation: halo-spotlight-breathe 12s ease-in-out infinite;
@@ -479,10 +480,12 @@ export function HaloCollection() {
           z-index: 2;
           opacity: 0.98;
           filter:
-            drop-shadow(0 0 1px rgb(var(--active-rgb) / 0.96))
-            drop-shadow(0 0 6px rgb(var(--active-rgb) / 0.46))
-            drop-shadow(0 0 16px rgb(var(--active-rgb) / 0.2))
-            drop-shadow(0 10px 16px rgb(var(--active-rgb) / 0.1));
+            drop-shadow(0 0 2px rgb(var(--active-rgb) / 0.96))
+            drop-shadow(0 0 8px rgb(var(--active-rgb) / 0.58))
+            drop-shadow(0 0 18px rgb(var(--active-rgb) / 0.34))
+            drop-shadow(0 0 34px rgb(var(--active-rgb) / 0.18))
+            drop-shadow(0 0 64px rgb(var(--active-rgb) / 0.08))
+            drop-shadow(0 14px 20px rgb(var(--active-rgb) / 0.08));
           animation: halo-contour-breathe 10s ease-in-out infinite;
           will-change: filter, opacity;
         }
@@ -664,10 +667,10 @@ export function HaloCollection() {
         @keyframes halo-spotlight-breathe {
           0%,
           100% {
-            opacity: 0.18;
+            opacity: 0.24;
           }
           50% {
-            opacity: 0.24;
+            opacity: 0.32;
           }
         }
 
@@ -733,11 +736,11 @@ export function HaloCollection() {
           }
 
           .halo-light__spotlight {
-            top: -2%;
-            width: 42%;
-            height: 52%;
-            filter: blur(11px);
-            opacity: 0.18;
+            top: -4%;
+            width: 60%;
+            height: 66%;
+            filter: blur(16px);
+            opacity: 0.26;
           }
 
           .halo-light__plinth {
@@ -758,9 +761,11 @@ export function HaloCollection() {
 
           .halo-object__image--glow {
             filter:
-              drop-shadow(0 0 1px rgb(var(--active-rgb) / 0.94))
-              drop-shadow(0 0 4px rgb(var(--active-rgb) / 0.42))
-              drop-shadow(0 0 11px rgb(var(--active-rgb) / 0.17));
+              drop-shadow(0 0 2px rgb(var(--active-rgb) / 0.94))
+              drop-shadow(0 0 7px rgb(var(--active-rgb) / 0.5))
+              drop-shadow(0 0 16px rgb(var(--active-rgb) / 0.28))
+              drop-shadow(0 0 28px rgb(var(--active-rgb) / 0.14))
+              drop-shadow(0 0 48px rgb(var(--active-rgb) / 0.07));
           }
 
           .halo-copy {
