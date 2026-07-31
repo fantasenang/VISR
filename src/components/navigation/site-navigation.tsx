@@ -3,9 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 
 const items = [
-  { label: "Halo Collection", href: "#halo" },
+  { label: "Link", href: "#exhibition" },
   { label: "Carry", href: "#carry" },
-  { label: "Exhibition", href: "#exhibition" },
+  { label: "Halo", href: "#halo" },
 ] as const;
 
 export function SiteNavigation() {
@@ -62,8 +62,8 @@ export function SiteNavigation() {
           ))}
         </div>
 
-        <a href="#configure" className="site-navigation__action">
-          Explore
+        <a href="#preorder" className="site-navigation__action" aria-label="View Batch 2 preorder for Rp179,000">
+          Preorder · Rp179K
         </a>
       </nav>
     </header>
