@@ -15,12 +15,11 @@ on:
 permissions:
   contents: read
 
-environment: production
-
 jobs:
   release-gate:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    environment: production
 
     steps:
       - name: Checkout
