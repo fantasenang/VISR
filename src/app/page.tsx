@@ -1,3 +1,4 @@
+import { LinkStockStatus } from "@/components/commerce/link-stock-status";
 import { PreorderCta } from "@/components/commerce/preorder-cta";
 import { SiteNavigation } from "@/components/navigation/site-navigation";
 import { CarryPhase16 } from "@/experience/carry-phase-16/carry-phase-16";
@@ -68,6 +69,7 @@ export default function HomePage() {
                 <div>
                   <p className="visr-label text-white/35">Sold Separately</p>
                   <p className="mt-3 leading-7 text-white/65">Halo Collection<br />Additional VISR Link<br />Diecast car</p>
+                  <LinkStockStatus />
                 </div>
               </div>
             </div>
