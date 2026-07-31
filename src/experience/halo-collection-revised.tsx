@@ -6,7 +6,6 @@ import { useEffect, useRef, useState } from "react";
 const halos = [
   { slug: "ice", name: "Halo Ice", line: "Pure Focus", rgb: "126 226 255" },
   { slug: "emerald", name: "Halo Emerald", line: "Quiet Depth", rgb: "36 194 132" },
-  { slug: "violet", name: "Halo Violet", line: "Silent Boldness", rgb: "145 91 255" },
   { slug: "crimson", name: "Halo Crimson", line: "Bold Presence", rgb: "208 28 48" },
   { slug: "amber", name: "Halo Amber", line: "Warm Precision", rgb: "235 169 49" },
   { slug: "pink", name: "Halo Pink", line: "Unexpected Elegance", rgb: "255 78 166" },
@@ -50,7 +49,7 @@ export function HaloCollection() {
     >
       <header className="halo-intro visr-container">
         <p className="visr-label">Halo Collection</p>
-        <h2 id="halo-collection-title">One object.<br />Six identities.</h2>
+        <h2 id="halo-collection-title">One object.<br />Five identities.</h2>
       </header>
 
       <div className="halo-sequence">
@@ -81,7 +80,7 @@ export function HaloCollection() {
 
       <footer className="halo-ending visr-container">
         <p>One collection.</p>
-        <p>Six identities.</p>
+        <p>Five identities.</p>
       </footer>
 
       <style jsx>{`
