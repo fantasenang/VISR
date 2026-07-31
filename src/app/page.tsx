@@ -26,15 +26,56 @@ export default function HomePage() {
       <CarryPhase16 />
       <HaloCollection />
 
+      <section id="preorder-details" className="border-t border-white/[0.07] py-24 md:py-36">
+        <div className="visr-container">
+          <div className="grid gap-14 md:grid-cols-12">
+            <div className="md:col-span-4">
+              <p className="visr-label text-white/42">Batch 2 Preorder</p>
+              <h2 className="mt-6 text-[clamp(2.7rem,5vw,5.8rem)] font-normal leading-[0.96] tracking-[-0.05em]">
+                Built after the preorder closes.
+              </h2>
+            </div>
+
+            <div className="space-y-10 md:col-span-7 md:col-start-6">
+              <div className="grid gap-7 border-b border-white/10 pb-10 sm:grid-cols-2">
+                <div>
+                  <p className="visr-label text-white/35">Preorder Opens</p>
+                  <p className="mt-3 text-2xl">7 August 2026</p>
+                </div>
+                <div>
+                  <p className="visr-label text-white/35">Production</p>
+                  <p className="mt-3 text-2xl">Maximum 14 business days</p>
+                </div>
+              </div>
+
+              <p className="max-w-2xl text-base leading-7 text-white/55">
+                Production begins after the preorder period closes. Finished units are dispatched immediately after passing final inspection, without waiting for the entire batch to be completed.
+              </p>
+
+              <div className="grid gap-7 sm:grid-cols-2">
+                <div>
+                  <p className="visr-label text-white/35">Included</p>
+                  <p className="mt-3 leading-7 text-white/65">1× VISR Carry Gen 2<br />2× VISR Link</p>
+                </div>
+                <div>
+                  <p className="visr-label text-white/35">Sold Separately</p>
+                  <p className="mt-3 leading-7 text-white/65">Halo Collection<br />Additional VISR Link<br />Diecast car</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section id="configure" className="border-t border-white/[0.07] py-32 md:py-52">
         <div className="visr-container text-center">
           <p className="visr-label mb-7 text-white/42">The Invitation</p>
           <h2 className="mx-auto max-w-[11ch] text-[clamp(3rem,7vw,8rem)] font-normal leading-[0.94] tracking-[-0.055em]">Your collection deserves its moment.</h2>
-          <p className="mx-auto mt-8 max-w-xl text-base leading-7 text-white/48">
-            <span className="block">VISR Carry Batch 2.</span>
-            <span className="block">Pre-order price Rp179.000 — website only.</span>
-            <span className="block">100 units available.</span>
-          </p>
+          <div className="mx-auto mt-8 max-w-xl text-base leading-7 text-white/48">
+            <p>VISR Carry Gen 2 — Batch 2 Preorder.</p>
+            <p><span className="text-white/75">Rp179.000 preorder</span> · Rp199.000 ready stock.</p>
+            <p>Website exclusive · 100 units available.</p>
+          </div>
           <a
             href="/checkout"
             className="mt-10 inline-flex items-center justify-center rounded-full bg-white px-8 py-4 text-sm font-medium transition hover:bg-white/85"
@@ -42,6 +83,9 @@ export default function HomePage() {
           >
             Reserve Your VISR
           </a>
+          <p className="mx-auto mt-5 max-w-lg text-xs leading-5 text-white/32">
+            Preorder opens 7 August 2026. Production begins after preorder closes and takes a maximum of 14 business days.
+          </p>
         </div>
       </section>
 
@@ -51,9 +95,14 @@ export default function HomePage() {
             <span className="tracking-[0.16em]">VISR</span>
             <span>Digital Exhibition / Link, Carry & Halo</span>
           </div>
-          <a href="/order" className="w-fit text-white/55 transition hover:text-white">
-            View Order →
-          </a>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
+            <a href="https://wa.me/6281806288892" className="w-fit text-white/55 transition hover:text-white">
+              WhatsApp Support
+            </a>
+            <a href="/order" className="w-fit text-white/55 transition hover:text-white">
+              View Order →
+            </a>
+          </div>
         </div>
       </footer>
     </main>
