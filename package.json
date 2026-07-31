@@ -7,10 +7,11 @@
   },
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build",
+    "build": "npm run security:check && next build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "security:check": "node scripts/security-regression.mjs",
     "smoke:production": "node scripts/production-smoke.mjs",
     "check:go-live": "node scripts/go-live-readiness.mjs"
   },
