@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "service": "visr-commerce",
+  "owner": "VISR operations",
+  "rules": [
+    {
+      "id": "readiness-down",
+      "severity": "critical",
+      "signal": "GET /api/ready non-200",
+      "condition": "2 consecutive checks within 5 minutes",
+      "action": "Freeze deployments and follow the incident runbook."
+    },
+    {
+      "id": "api-server-errors",
+      "severity": "high",
+      "signal": "API HTTP 5xx ratio",
+      "condition": "> 1% for 10 minutes and at least 20 requests",
+      "action": "Identify the failing route and deployment SHA; roll back when correlated with a release."
+    },
+    {
+      "id": "payment-webhook-failures",
+      "severity": "critical",
+      "signal": "MIDTRANS_WEBHOOK_UPDATE_FAILED or MIDTRANS_WEBHOOK_ORDER_LOOKUP_FAILED",
+      "condition": ">= 3 events in 5 minutes",
+      "action": "Pause launch promotion, verify Supabase availability, and reconcile affected orders."
+    },
+    {
+      "id": "payment-integrity",
+      "severity": "critical",
+      "signal": "MIDTRANS_WEBHOOK_AMOUNT_MISMATCH",
+      "condition": ">= 1 event",
+      "action": "Treat as a payment-integrity incident and investigate before manually changing any order."
+    },
+    {
+      "id": "invalid-signature",
+      "severity": "high",
+      "signal": "MIDTRANS_WEBHOOK_INVALID_SIGNATURE",
+      "condition": ">= 3 events in 10 minutes",
+      "action": "Check callback configuration and source traffic; do not disable signature verification."
+    },
+    {
+      "id": "webhook-latency",
+      "severity": "medium",
+      "signal": "MIDTRANS_WEBHOOK_APPLIED durationMs p95",
+      "condition": "> 2500 ms for 15 minutes",
+      "action": "Inspect lookup, verification, and database-update duration fields."
+    },
+    {
+      "id": "smoke-test-failure",
+      "severity": "high",
+      "signal": "production smoke test",
+      "condition": "any failed post-deployment run",
+      "action": "Do not promote the deployment until the failed check is understood and resolved."
+    }
+  ]
+}
