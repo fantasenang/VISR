@@ -1,5 +1,6 @@
 import { LinkStockStatus } from "@/components/commerce/link-stock-status";
 import { PreorderCta } from "@/components/commerce/preorder-cta";
+import { PreorderSummary } from "@/components/commerce/preorder-summary";
 import { SiteNavigation } from "@/components/navigation/site-navigation";
 import { CarryPhase16 } from "@/experience/carry-phase-16/carry-phase-16";
 import { HaloCollection } from "@/experience/halo-collection-revised";
@@ -14,6 +15,7 @@ export default function HomePage() {
     <main>
       <SiteNavigation />
       <OpeningSequence />
+      <PreorderSummary />
       <LinkSystem />
 
       <section id="visr" className="py-28 md:py-48">
