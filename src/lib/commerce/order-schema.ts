@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { haloVariants, products } from "@/lib/commerce/catalog";
+import { sanitizeMultilineText, sanitizePlainText } from "@/lib/security/input";
 
 const allowedSkus = new Set<string>([
   products.carry.sku,
@@ -13,15 +14,21 @@ const quantityLimits = new Map<string, number>([
   ...haloVariants.map((variant) => [variant.sku, products.halo.maxPerVariant] as const),
 ]);
 
+const plainText = (minimum: number, maximum: number) =>
+  z.string().transform(sanitizePlainText).pipe(z.string().min(minimum).max(maximum));
+
+const multilineText = (minimum: number, maximum: number) =>
+  z.string().transform(sanitizeMultilineText).pipe(z.string().min(minimum).max(maximum));
+
 export const customerSchema = z.object({
-  fullName: z.string().trim().min(2).max(100),
+  fullName: plainText(2, 100),
   whatsapp: z.string().trim().regex(/^62\d{8,13}$/, "WhatsApp must use normalized Indonesian format"),
   email: z.string().trim().email().max(254).transform((value) => value.toLowerCase()),
-  address: z.string().trim().min(10).max(500),
-  province: z.string().trim().min(2).max(100),
-  city: z.string().trim().min(2).max(100),
+  address: multilineText(10, 500),
+  province: plainText(2, 100),
+  city: plainText(2, 100),
   postalCode: z.string().trim().regex(/^\d{5}$/),
-  notes: z.string().trim().max(500).optional().default(""),
+  notes: z.string().transform(sanitizeMultilineText).pipe(z.string().max(500)).optional().default(""),
   preorderConsent: z.literal(true),
 });
 
@@ -32,12 +39,8 @@ export const reservationItemSchema = z.object({
 
 export const shippingSelectionSchema = z.object({
   destinationId: z.coerce.number().int().positive(),
-  destinationLabel: z.string().trim().min(3).max(200),
+  destinationLabel: plainText(3, 200),
   courier: z.enum(["jne", "jnt"]),
-  // RajaOngkir returns route-specific services such as CTC and CTCYES.
-  // The selected service is revalidated against a fresh server-side quote
-  // before the reservation is created, so validation should not hard-code
-  // a small list of service names here.
   service: z.string().trim().min(1).max(40).regex(/^[A-Z0-9_-]+$/, "Invalid courier service"),
   quotedCostIdr: z.coerce.number().int().positive().max(5_000_000),
 });
