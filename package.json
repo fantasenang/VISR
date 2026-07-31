@@ -11,7 +11,8 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "smoke:production": "node scripts/production-smoke.mjs"
+    "smoke:production": "node scripts/production-smoke.mjs",
+    "check:go-live": "node scripts/go-live-readiness.mjs"
   },
   "dependencies": {
     "@vercel/analytics": "^1.5.0",
