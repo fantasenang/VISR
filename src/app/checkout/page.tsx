@@ -3,6 +3,7 @@ import CheckoutClient from "./checkout-client";
 import CheckoutPolish from "./checkout-polish";
 import PreorderGate from "./preorder-gate";
 import { haloVariants, products } from "@/lib/commerce/catalog";
+import { isPreorderPreviewOverride } from "@/lib/commerce/preorder-server";
 
 export const metadata: Metadata = {
   title: "Reserve Your VISR — Batch 2",
@@ -47,7 +48,7 @@ const checkoutProducts = {
 
 export default function CheckoutPage() {
   return (
-    <PreorderGate>
+    <PreorderGate forceOpen={isPreorderPreviewOverride()}>
       <CheckoutClient products={checkoutProducts} />
       <CheckoutPolish />
     </PreorderGate>
