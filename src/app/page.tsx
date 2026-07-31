@@ -1,3 +1,4 @@
+import { PreorderCta } from "@/components/commerce/preorder-cta";
 import { SiteNavigation } from "@/components/navigation/site-navigation";
 import { CarryPhase16 } from "@/experience/carry-phase-16/carry-phase-16";
 import { HaloCollection } from "@/experience/halo-collection-revised";
@@ -80,16 +81,7 @@ export default function HomePage() {
             <p><span className="text-white/75">Rp179.000 preorder</span> · Rp199.000 ready stock.</p>
             <p>Website exclusive · 100 units available.</p>
           </div>
-          <a
-            href="/checkout"
-            className="mt-10 inline-flex items-center justify-center rounded-full bg-white px-8 py-4 text-sm font-medium transition hover:bg-white/85"
-            style={{ color: "#030303" }}
-          >
-            Reserve Your VISR
-          </a>
-          <p className="mx-auto mt-5 max-w-lg text-xs leading-5 text-white/32">
-            Preorder runs 7–13 August 2026 and closes at 23.59 WIB, or earlier if 100 units are reserved. Production takes a maximum of 14 business days after preorder closes.
-          </p>
+          <PreorderCta />
         </div>
       </section>
 
