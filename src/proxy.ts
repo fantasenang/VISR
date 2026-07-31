@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { getPreorderPhase } from "@/lib/commerce/preorder";
 
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9._:-]{8,128}$/;
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -75,6 +76,22 @@ export function proxy(request: NextRequest) {
   const requestId = resolveRequestId(request);
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-request-id", requestId);
+
+  if (request.method === "POST" && request.nextUrl.pathname === "/api/orders") {
+    const preorderPhase = getPreorderPhase();
+    if (preorderPhase !== "open") {
+      const response = NextResponse.json(
+        {
+          error: preorderPhase === "upcoming" ? "PREORDER_NOT_OPEN" : "PREORDER_CLOSED",
+          requestId,
+        },
+        { status: 403 },
+      );
+      response.headers.set("x-request-id", requestId);
+      return response;
+    }
+  }
+
   const policy = resolveRateLimitPolicy(request.nextUrl.pathname, request.method);
   let rateLimitResult: ReturnType<typeof consumeRateLimit> | null = null;
 
