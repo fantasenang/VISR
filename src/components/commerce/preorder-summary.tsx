@@ -5,17 +5,14 @@ export function PreorderSummary() {
   const previewOpen = isPreorderPreviewOverride();
 
   return (
-    <section id="preorder" className="border-y border-white/[0.07] bg-white/[0.018] py-20 md:py-28">
+    <section id="preorder" className="border-y border-white/[0.07] bg-white/[0.018] py-16 md:py-24">
       <div className="visr-container">
-        <div className="grid gap-14 md:grid-cols-12 md:items-end">
-          <div className="md:col-span-7">
+        <div className="grid gap-10 md:grid-cols-12 md:items-start">
+          <div className="md:col-span-4">
             <p className="visr-label text-white/42">VISR Carry Gen 2 · Batch 2</p>
-            <h1 className="mt-6 max-w-[13ch] text-[clamp(2.45rem,6vw,6.4rem)] font-normal leading-[0.94] tracking-[-0.05em]">
-              Reserve the display. Keep the collection the hero.
-            </h1>
           </div>
 
-          <div className="md:col-span-4 md:col-start-9">
+          <div className="md:col-span-7 md:col-start-6">
             <div className="flex items-end gap-4">
               <p className="text-[clamp(2.5rem,5vw,4.8rem)] leading-none tracking-[-0.05em]">Rp179.000</p>
               <p className="pb-1 text-sm leading-5 text-white/38">preorder<br />Rp199.000 ready stock</p>
