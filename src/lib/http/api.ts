@@ -11,6 +11,30 @@ export type ApiErrorBody = {
   requestId: string;
 };
 
+const SAFE_ERROR_CODE = /^[A-Z0-9_]{2,80}$/;
+const SENSITIVE_ERROR_PATTERN = /postgres|supabase|postgrest|sql|schema|relation|column|constraint|function|stack|trace|authorization|bearer|apikey|api[_-]?key|secret|service[_-]?role|server[_-]?key|signature|environment variable|process\.env|https?:\/\//i;
+
+function safeCode(value: unknown, fallback: string) {
+  return typeof value === "string" && SAFE_ERROR_CODE.test(value) ? value : fallback;
+}
+
+function safeMessage(value: unknown, fallback: string) {
+  if (typeof value !== "string") return fallback;
+  const normalized = value.replace(/[\u0000-\u001F\u007F]/g, " ").replace(/\s+/g, " ").trim();
+  if (!normalized || normalized.length > 240 || SENSITIVE_ERROR_PATTERN.test(normalized)) return fallback;
+  return normalized;
+}
+
+function safeDetails(value: unknown) {
+  if (value == null) return undefined;
+  // Validation details are safe to expose. Provider/database objects are not.
+  if (typeof value !== "object" || Array.isArray(value)) return undefined;
+  const candidate = value as Record<string, unknown>;
+  const allowed = ["fieldErrors", "formErrors", "currentCostIdr"];
+  const entries = Object.entries(candidate).filter(([key]) => allowed.includes(key));
+  return entries.length ? Object.fromEntries(entries) : undefined;
+}
+
 export function apiError(
   requestId: string,
   code: string,
@@ -18,11 +42,12 @@ export function apiError(
   status: number,
   details?: unknown,
 ) {
+  const sanitizedDetails = safeDetails(details);
   const body: ApiErrorBody = {
     error: {
-      code,
-      message,
-      ...(details === undefined ? {} : { details }),
+      code: safeCode(code, "REQUEST_FAILED"),
+      message: safeMessage(message, "The request could not be completed."),
+      ...(sanitizedDetails === undefined ? {} : { details: sanitizedDetails }),
     },
     requestId,
   };
@@ -63,7 +88,7 @@ export async function readJsonBody(request: Request, maximumBytes = MAX_JSON_BOD
       offset += chunk.byteLength;
     }
 
-    const text = new TextDecoder().decode(bytes);
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
     return { ok: true as const, value: JSON.parse(text) as unknown };
   } catch {
     return { ok: false as const, code: "INVALID_JSON", status: 400 as const };
@@ -79,30 +104,24 @@ export function normalizeErrorBody(
   const rawError = body.error;
   if (rawError && typeof rawError === "object" && !Array.isArray(rawError)) {
     const candidate = rawError as Record<string, unknown>;
+    const details = safeDetails(candidate.details);
     return {
       error: {
-        code: typeof candidate.code === "string" ? candidate.code : fallbackCode,
-        message: typeof candidate.message === "string" ? candidate.message : fallbackMessage,
-        ...(candidate.details === undefined ? {} : { details: candidate.details }),
+        code: safeCode(candidate.code, fallbackCode),
+        message: safeMessage(candidate.message, fallbackMessage),
+        ...(details === undefined ? {} : { details }),
       },
       requestId,
     };
   }
 
-  const code = typeof body.code === "string"
-    ? body.code
-    : typeof rawError === "string" && /^[A-Z0-9_]+$/.test(rawError)
-      ? rawError
-      : fallbackCode;
-  const message = typeof rawError === "string" && rawError !== code
-    ? rawError
-    : fallbackMessage;
-
+  const code = safeCode(body.code, typeof rawError === "string" ? safeCode(rawError, fallbackCode) : fallbackCode);
+  const details = safeDetails(body.details);
   return {
     error: {
       code,
-      message,
-      ...(body.details === undefined ? {} : { details: body.details }),
+      message: safeMessage(rawError, fallbackMessage),
+      ...(details === undefined ? {} : { details }),
     },
     requestId,
   };
