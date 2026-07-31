@@ -1,0 +1,65 @@
+name: Production Release Gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_payment_mode:
+        description: Expected Midtrans mode
+        required: true
+        default: sandbox
+        type: choice
+        options:
+          - sandbox
+          - production
+
+permissions:
+  contents: read
+
+environment: production
+
+jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate production configuration
+        run: npm run check:go-live
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          MIDTRANS_SERVER_KEY: ${{ secrets.MIDTRANS_SERVER_KEY }}
+          MIDTRANS_IS_PRODUCTION: ${{ inputs.expected_payment_mode == 'production' }}
+          RAJAONGKIR_API_KEY: ${{ secrets.RAJAONGKIR_API_KEY }}
+          NEXT_PUBLIC_APP_URL: https://visr.works
+          VERCEL_ENV: production
+
+      - name: Run non-destructive production smoke test
+        run: npm run smoke:production
+        env:
+          PRODUCTION_BASE_URL: https://visr.works
+
+      - name: Verify expected payment mode
+        run: |
+          node --input-type=module <<'EOF'
+          const response = await fetch('https://visr.works/api/health', { cache: 'no-store' });
+          const body = await response.json();
+          const expected = '${{ inputs.expected_payment_mode }}';
+          if (!response.ok || body.paymentMode !== expected) {
+            console.error(`Expected payment mode ${expected}, received ${body.paymentMode ?? 'unknown'}`);
+            process.exit(1);
+          }
+          console.log(`Payment mode verified: ${body.paymentMode}`);
+          EOF
