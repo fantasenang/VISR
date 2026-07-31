@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { elapsedMs, logger, requestIdFrom } from "@/lib/observability/logger";
+import { apiError, normalizeErrorBody, readJsonBody } from "@/lib/http/api";
 
 const requestSchema = z.object({ orderId: z.string().uuid() });
 
@@ -12,6 +13,10 @@ type CachedSnap = { expiresAt: number; promise: Promise<SnapResult> };
 
 const SNAP_CACHE_TTL_MS = 15 * 60 * 1000;
 const snapCache = new Map<string, CachedSnap>();
+
+function failure(code: string, message: string, details?: unknown): Record<string, unknown> {
+  return { error: { code, message, ...(details === undefined ? {} : { details }) } };
+}
 
 function pruneSnapCache(now: number) {
   for (const [key, entry] of snapCache) if (entry.expiresAt <= now) snapCache.delete(key);
@@ -26,7 +31,7 @@ async function createSnapToken(orderId: string, requestId: string): Promise<Snap
 
   if (!supabaseUrl || !serviceRoleKey || !serverKey) {
     logger.error("MIDTRANS_CONFIGURATION_ERROR", { requestId, orderId, hasSupabaseUrl: Boolean(supabaseUrl), hasServiceRoleKey: Boolean(serviceRoleKey), hasServerKey: Boolean(serverKey), environment: isProduction ? "production" : "sandbox" });
-    return { status: 503, body: { error: "Payment service is not configured yet. Your reservation remains active." } };
+    return { status: 503, body: failure("PAYMENT_NOT_CONFIGURED", "Payment service is not configured yet. Your reservation remains active.") };
   }
 
   const headers = { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` };
@@ -38,15 +43,15 @@ async function createSnapToken(orderId: string, requestId: string): Promise<Snap
 
   if (!orderResponse.ok || !itemsResponse.ok) {
     logger.error("MIDTRANS_ORDER_LOOKUP_ERROR", { requestId, orderId, orderStatus: orderResponse.status, itemsStatus: itemsResponse.status, durationMs: elapsedMs(lookupStartedAt) });
-    return { status: 502, body: { error: "We could not prepare your payment. Your reservation remains active." } };
+    return { status: 502, body: failure("PAYMENT_PREPARATION_FAILED", "We could not prepare your payment. Your reservation remains active.") };
   }
 
   const orders = (await orderResponse.json()) as OrderRow[];
   const items = (await itemsResponse.json()) as ItemRow[];
   const order = orders[0];
-  if (!order) return { status: 404, body: { error: "ORDER_NOT_FOUND" } };
-  if (order.payment_status !== "pending") return { status: 409, body: { error: "ORDER_NOT_PAYABLE" } };
-  if (new Date(order.payment_expires_at).getTime() <= Date.now()) return { status: 409, body: { error: "ORDER_EXPIRED" } };
+  if (!order) return { status: 404, body: failure("ORDER_NOT_FOUND", "The order could not be found.") };
+  if (order.payment_status !== "pending") return { status: 409, body: failure("ORDER_NOT_PAYABLE", "This order is no longer payable.") };
+  if (new Date(order.payment_expires_at).getTime() <= Date.now()) return { status: 409, body: failure("ORDER_EXPIRED", "The payment window for this order has expired.") };
 
   const grossAmount = order.total_idr;
   const itemDetails = items.map((item) => ({ id: item.sku, price: item.unit_price_idr, quantity: item.quantity, name: item.variant_name ? `${item.product_name} — ${item.variant_name}` : item.product_name }));
@@ -87,7 +92,7 @@ async function createSnapToken(orderId: string, requestId: string): Promise<Snap
       providerDurationMs: elapsedMs(providerStartedAt),
       durationMs: elapsedMs(startedAt),
     });
-    return { status: 502, body: { error: "Payment service is temporarily unavailable. Your reservation remains active. Please try again in a few minutes." } };
+    return { status: 502, body: failure("PAYMENT_PROVIDER_UNAVAILABLE", "Payment service is temporarily unavailable. Your reservation remains active. Please try again in a few minutes.") };
   }
 
   logger.info("MIDTRANS_SNAP_CREATED", { requestId, orderId, orderNumber: order.order_number, grossAmount, environment: isProduction ? "production" : "sandbox", providerDurationMs: elapsedMs(providerStartedAt), durationMs: elapsedMs(startedAt) });
@@ -96,10 +101,17 @@ async function createSnapToken(orderId: string, requestId: string): Promise<Snap
 
 export async function POST(request: Request) {
   const requestId = requestIdFrom(request);
-  const parsed = requestSchema.safeParse(await request.json().catch(() => null));
+  const body = await readJsonBody(request);
+  if (!body.ok) {
+    const message = body.code === "PAYLOAD_TOO_LARGE" ? "Request body exceeds the 64 KB limit." : "Request body must contain valid JSON.";
+    logger.warn("INVALID_PAYMENT_REQUEST_BODY", { requestId, code: body.code });
+    return apiError(requestId, body.code, message, body.status);
+  }
+
+  const parsed = requestSchema.safeParse(body.value);
   if (!parsed.success) {
-    logger.warn("INVALID_PAYMENT_REQUEST", { requestId });
-    return NextResponse.json({ error: "INVALID_PAYMENT_REQUEST" }, { status: 400 });
+    logger.warn("INVALID_PAYMENT_REQUEST", { requestId, issues: parsed.error.issues.map((issue) => issue.path.join(".")) });
+    return apiError(requestId, "INVALID_PAYMENT_REQUEST", "A valid order ID is required.", 400, parsed.error.flatten());
   }
 
   const now = Date.now();
@@ -116,5 +128,16 @@ export async function POST(request: Request) {
   }
 
   const result = await promise;
-  return NextResponse.json(result.body, { status: result.status, headers: { "x-request-id": requestId, ...(replayed ? { "Idempotency-Replayed": "true" } : {}) } });
+  const responseBody = result.status >= 400
+    ? normalizeErrorBody(requestId, result.body, "PAYMENT_REQUEST_FAILED", "The payment request could not be completed.")
+    : result.body;
+
+  return NextResponse.json(responseBody, {
+    status: result.status,
+    headers: {
+      "x-request-id": requestId,
+      "Cache-Control": "no-store, max-age=0",
+      ...(replayed ? { "Idempotency-Replayed": "true" } : {}),
+    },
+  });
 }
