@@ -12,15 +12,16 @@ function formatRemaining(milliseconds: number) {
   return `${days}d ${String(hours).padStart(2, "0")}h ${String(minutes).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}s`;
 }
 
-export default function PreorderGate({ children }: { children: ReactNode }) {
+export default function PreorderGate({ children, forceOpen = false }: { children: ReactNode; forceOpen?: boolean }) {
   const [now, setNow] = useState(() => Date.now());
-  const phase = getPreorderPhase(now);
+  const phase = forceOpen ? "open" : getPreorderPhase(now);
   const remaining = useMemo(() => formatRemaining(getPreorderTarget(phase) - now), [now, phase]);
 
   useEffect(() => {
+    if (forceOpen) return;
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [forceOpen]);
 
   if (phase === "open") return children;
 
