@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getPreorderPhase } from "@/lib/commerce/preorder";
+import { getServerPreorderPhase } from "@/lib/commerce/preorder-server";
 
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9._:-]{8,128}$/;
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -78,7 +78,7 @@ export function proxy(request: NextRequest) {
   requestHeaders.set("x-request-id", requestId);
 
   if (request.method === "POST" && request.nextUrl.pathname === "/api/orders") {
-    const preorderPhase = getPreorderPhase();
+    const preorderPhase = getServerPreorderPhase();
     if (preorderPhase !== "open") {
       const response = NextResponse.json(
         {
