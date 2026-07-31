@@ -35,13 +35,13 @@ begin
       message = 'ORDER_NOT_FOUND';
   end if;
 
-  -- Explicit state machine. Paid, refunded, and expired are terminal for the
-  -- automated webhook path. Any exceptional recovery requires manual review.
+  -- Explicit state machine. Paid, refunded, expired, and failed are terminal
+  -- for the automated webhook path. Exceptional recovery requires manual review.
   transition_allowed := case target_order.payment_status
     when 'pending' then p_payment_status in ('pending', 'paid', 'expired', 'failed')
     when 'paid' then p_payment_status = 'paid'
     when 'expired' then p_payment_status = 'expired'
-    when 'failed' then p_payment_status in ('failed', 'paid')
+    when 'failed' then p_payment_status = 'failed'
     when 'refunded' then p_payment_status = 'refunded'
     else false
   end;
