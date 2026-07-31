@@ -37,10 +37,14 @@ export default function HomePage() {
             </div>
 
             <div className="space-y-10 md:col-span-7 md:col-start-6">
-              <div className="grid gap-7 border-b border-white/10 pb-10 sm:grid-cols-2">
+              <div className="grid gap-7 border-b border-white/10 pb-10 sm:grid-cols-3">
                 <div>
                   <p className="visr-label text-white/35">Preorder Opens</p>
                   <p className="mt-3 text-2xl">7 August 2026</p>
+                </div>
+                <div>
+                  <p className="visr-label text-white/35">Preorder Closes</p>
+                  <p className="mt-3 text-2xl">13 August · 23.59 WIB</p>
                 </div>
                 <div>
                   <p className="visr-label text-white/35">Production</p>
@@ -49,7 +53,7 @@ export default function HomePage() {
               </div>
 
               <p className="max-w-2xl text-base leading-7 text-white/55">
-                Production begins after the preorder period closes. Finished units are dispatched immediately after passing final inspection, without waiting for the entire batch to be completed.
+                Preorder may close earlier when all 100 units are reserved. Production begins after the preorder period closes. Finished units are dispatched immediately after passing final inspection, without waiting for the entire batch to be completed.
               </p>
 
               <div className="grid gap-7 sm:grid-cols-2">
@@ -84,7 +88,7 @@ export default function HomePage() {
             Reserve Your VISR
           </a>
           <p className="mx-auto mt-5 max-w-lg text-xs leading-5 text-white/32">
-            Preorder opens 7 August 2026. Production begins after preorder closes and takes a maximum of 14 business days.
+            Preorder runs 7–13 August 2026 and closes at 23.59 WIB, or earlier if 100 units are reserved. Production takes a maximum of 14 business days after preorder closes.
           </p>
         </div>
       </section>
