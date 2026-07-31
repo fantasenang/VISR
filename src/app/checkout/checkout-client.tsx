@@ -47,7 +47,6 @@ const haloGlowById: Record<string, string> = {
   crimson: "208 28 48",
   ice: "126 226 255",
   emerald: "36 194 132",
-  violet: "145 91 255",
   amber: "235 169 49",
   pink: "255 78 166",
 };
@@ -301,7 +300,7 @@ export default function CheckoutClient({ products }: { products: CheckoutProduct
         <div className="grid gap-10 lg:grid-cols-[1fr_390px]">
           <section>
             {step === "products" && <div className="space-y-6">
-              <ProductCard label="Core System" title={products.carry.name} note="Includes 1 VISR Link · 500 g product weight" price={products.carry.price} stock={products.carry.stock}><QuantityControl value={carryQty} max={Math.min(products.carry.stock, 3)} onChange={setCarryQty} /></ProductCard>
+              <ProductCard label="Core System" title={products.carry.name} note="Includes 2 VISR Links · Diecast car sold separately" price={products.carry.price} stock={products.carry.stock}><QuantityControl value={carryQty} max={Math.min(products.carry.stock, 3)} onChange={setCarryQty} /></ProductCard>
               <article className="rounded-[2rem] border border-white/10 bg-white/[0.025] p-7 md:p-9"><div className="flex items-start justify-between gap-6"><div><p className="visr-label text-white/40">Halo Collection</p><h2 className="mt-3 text-2xl">Choose your halo.</h2><p className="mt-3 text-sm text-white/45">Each Halo is 150 g. One per color.</p></div><p className="text-lg">{formatRupiah(products.halo.price)}</p></div><div className="mt-7 grid gap-3 sm:grid-cols-2">{products.halo.variants.map((variant) => { const selected = haloVariantIds.includes(variant.id); const stock = liveStock[variant.sku]; const remaining = stock?.remaining ?? variant.stock; const soldOut = stock?.soldOut ?? remaining === 0; const rgb = haloGlowById[variant.id] ?? "255 255 255"; return <button key={variant.id} type="button" disabled={soldOut} onClick={() => toggleHalo(variant.id)} style={{ "--halo-button-rgb": rgb, ...(selected ? { borderColor: `rgb(${rgb} / 0.9)`, boxShadow: `0 0 0 1px rgb(${rgb} / 0.28), 0 0 22px rgb(${rgb} / 0.32), inset 0 0 18px rgb(${rgb} / 0.08)` } : {}) } as CSSProperties} className={`rounded-2xl border p-5 text-left transition duration-300 ${selected ? "bg-white/[0.06] text-white" : "border-white/10 bg-black/20 hover:border-[rgb(var(--halo-button-rgb)/0.5)] hover:shadow-[0_0_16px_rgb(var(--halo-button-rgb)/0.16)]"} disabled:cursor-not-allowed disabled:opacity-30`}><span className="block">{variant.name}</span><span className={`mt-2 block text-xs ${selected ? "text-white/60" : "text-white/35"}`}>{soldOut ? "Sold Out" : `${remaining} Remaining`}</span></button>; })}</div></article>
               <ProductCard label="Optional Add-on" title="Additional VISR Link" note="25 g each · for wall, desk, and future VISR systems." price={products.additionalLink.price} stock={products.additionalLink.stock}><QuantityControl value={linkQty} max={Math.min(products.additionalLink.stock, 5)} onChange={setLinkQty} /></ProductCard>
             </div>}
