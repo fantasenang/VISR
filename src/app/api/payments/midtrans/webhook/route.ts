@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { elapsedMs, logger, requestIdFrom } from "@/lib/observability/logger";
+import { apiError, readJsonBody } from "@/lib/http/api";
 
 const notificationSchema = z.object({
   order_id: z.string().min(1).max(100),
@@ -13,13 +14,7 @@ const notificationSchema = z.object({
   fraud_status: z.string().max(50).optional(),
 });
 
-type OrderRow = {
-  id: string;
-  order_number: string;
-  total_idr: number;
-  payment_status: string;
-};
-
+type OrderRow = { id: string; order_number: string; total_idr: number; payment_status: string };
 type MidtransStatusResponse = {
   order_id?: string;
   status_code?: string;
@@ -51,17 +46,25 @@ function normalizePaymentStatus(transactionStatus: string, fraudStatus?: string)
 export async function POST(request: Request) {
   const requestId = requestIdFrom(request);
   const startedAt = performance.now();
-  const parsed = notificationSchema.safeParse(await request.json().catch(() => null));
+  const body = await readJsonBody(request);
+  if (!body.ok) {
+    logger.warn("MIDTRANS_WEBHOOK_INVALID_BODY", { requestId, code: body.code, durationMs: elapsedMs(startedAt) });
+    return apiError(
+      requestId,
+      body.code,
+      body.code === "PAYLOAD_TOO_LARGE" ? "Notification body exceeds the 64 KB limit." : "Notification body must contain valid JSON.",
+      body.status,
+    );
+  }
+
+  const parsed = notificationSchema.safeParse(body.value);
   if (!parsed.success) {
     logger.warn("MIDTRANS_WEBHOOK_INVALID_BODY", {
       requestId,
       issues: parsed.error.issues.map((issue) => issue.path.join(".")),
       durationMs: elapsedMs(startedAt),
     });
-    return NextResponse.json(
-      { error: "INVALID_NOTIFICATION" },
-      { status: 400, headers: { "x-request-id": requestId } },
-    );
+    return apiError(requestId, "INVALID_NOTIFICATION", "The Midtrans notification payload is invalid.", 400, parsed.error.flatten());
   }
 
   const serverKey = process.env.MIDTRANS_SERVER_KEY;
@@ -78,10 +81,7 @@ export async function POST(request: Request) {
       environment: isProduction ? "production" : "sandbox",
       durationMs: elapsedMs(startedAt),
     });
-    return NextResponse.json(
-      { error: "PAYMENT_NOT_CONFIGURED" },
-      { status: 503, headers: { "x-request-id": requestId } },
-    );
+    return apiError(requestId, "PAYMENT_NOT_CONFIGURED", "Payment processing is not configured.", 503);
   }
 
   const payload = parsed.data;
@@ -97,17 +97,10 @@ export async function POST(request: Request) {
       providerStatus: payload.transaction_status,
       durationMs: elapsedMs(startedAt),
     });
-    return NextResponse.json(
-      { error: "INVALID_SIGNATURE" },
-      { status: 401, headers: { "x-request-id": requestId } },
-    );
+    return apiError(requestId, "INVALID_SIGNATURE", "The notification signature is invalid.", 401);
   }
 
-  const databaseHeaders = {
-    apikey: serviceRoleKey,
-    Authorization: `Bearer ${serviceRoleKey}`,
-  };
-
+  const databaseHeaders = { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` };
   const lookupStartedAt = performance.now();
   const orderResponse = await fetch(
     `${supabaseUrl}/rest/v1/orders?order_number=eq.${encodeURIComponent(payload.order_id)}&select=id,order_number,total_idr,payment_status&limit=1`,
@@ -123,25 +116,14 @@ export async function POST(request: Request) {
       orderLookupDurationMs,
       durationMs: elapsedMs(startedAt),
     });
-    return NextResponse.json(
-      { error: "ORDER_LOOKUP_FAILED" },
-      { status: 502, headers: { "x-request-id": requestId } },
-    );
+    return apiError(requestId, "ORDER_LOOKUP_FAILED", "The order could not be verified.", 502);
   }
 
   const orders = (await orderResponse.json()) as OrderRow[];
   const order = orders[0];
   if (!order) {
-    logger.warn("MIDTRANS_WEBHOOK_ORDER_NOT_FOUND", {
-      requestId,
-      orderNumber: payload.order_id,
-      orderLookupDurationMs,
-      durationMs: elapsedMs(startedAt),
-    });
-    return NextResponse.json(
-      { error: "ORDER_NOT_FOUND" },
-      { status: 404, headers: { "x-request-id": requestId } },
-    );
+    logger.warn("MIDTRANS_WEBHOOK_ORDER_NOT_FOUND", { requestId, orderNumber: payload.order_id, orderLookupDurationMs, durationMs: elapsedMs(startedAt) });
+    return apiError(requestId, "ORDER_NOT_FOUND", "The referenced order does not exist.", 404);
   }
 
   const notifiedAmount = parseGrossAmount(payload.gross_amount);
@@ -154,10 +136,7 @@ export async function POST(request: Request) {
       transactionId: payload.transaction_id ?? null,
       durationMs: elapsedMs(startedAt),
     });
-    return NextResponse.json(
-      { error: "AMOUNT_MISMATCH" },
-      { status: 409, headers: { "x-request-id": requestId } },
-    );
+    return apiError(requestId, "AMOUNT_MISMATCH", "The notified amount does not match the order total.", 409);
   }
 
   let transactionStatus = payload.transaction_status;
@@ -165,31 +144,19 @@ export async function POST(request: Request) {
   let transactionId = payload.transaction_id ?? null;
   let verifiedStatus: MidtransStatusResponse | null = null;
   let verificationDurationMs: number | null = null;
-
-  const statusBaseUrl = isProduction
-    ? "https://api.midtrans.com/v2"
-    : "https://api.sandbox.midtrans.com/v2";
+  const statusBaseUrl = isProduction ? "https://api.midtrans.com/v2" : "https://api.sandbox.midtrans.com/v2";
 
   try {
     const verificationStartedAt = performance.now();
     const statusResponse = await fetch(`${statusBaseUrl}/${encodeURIComponent(payload.order_id)}/status`, {
-      headers: {
-        Authorization: `Basic ${Buffer.from(`${serverKey}:`).toString("base64")}`,
-        Accept: "application/json",
-      },
+      headers: { Authorization: `Basic ${Buffer.from(`${serverKey}:`).toString("base64")}`, Accept: "application/json" },
       cache: "no-store",
     });
     verificationDurationMs = elapsedMs(verificationStartedAt);
-
     const candidate = (await statusResponse.json().catch(() => ({}))) as MidtransStatusResponse;
     const verifiedAmount = candidate.gross_amount ? parseGrossAmount(candidate.gross_amount) : null;
 
-    if (
-      statusResponse.ok &&
-      candidate.transaction_status &&
-      candidate.order_id === order.order_number &&
-      verifiedAmount === order.total_idr
-    ) {
+    if (statusResponse.ok && candidate.transaction_status && candidate.order_id === order.order_number && verifiedAmount === order.total_idr) {
       verifiedStatus = candidate;
       transactionStatus = candidate.transaction_status;
       fraudStatus = candidate.fraud_status;
@@ -217,10 +184,7 @@ export async function POST(request: Request) {
   const updateStartedAt = performance.now();
   const response = await fetch(`${supabaseUrl}/rest/v1/rpc/apply_midtrans_notification`, {
     method: "POST",
-    headers: {
-      ...databaseHeaders,
-      "Content-Type": "application/json",
-    },
+    headers: { ...databaseHeaders, "Content-Type": "application/json" },
     body: JSON.stringify({
       p_order_number: order.order_number,
       p_payment_status: normalizedStatus,
@@ -237,6 +201,7 @@ export async function POST(request: Request) {
   const databaseUpdateDurationMs = elapsedMs(updateStartedAt);
 
   if (!response.ok) {
+    const databaseFailure = await response.json().catch(() => ({})) as Record<string, unknown>;
     logger.error("MIDTRANS_WEBHOOK_UPDATE_FAILED", {
       requestId,
       orderNumber: order.order_number,
@@ -244,13 +209,12 @@ export async function POST(request: Request) {
       providerStatus: transactionStatus,
       normalizedStatus,
       databaseStatus: response.status,
+      databaseCode: databaseFailure.code ?? null,
+      databaseMessage: databaseFailure.message ?? null,
       databaseUpdateDurationMs,
       durationMs: elapsedMs(startedAt),
     });
-    return NextResponse.json(
-      { error: "PAYMENT_UPDATE_FAILED" },
-      { status: 502, headers: { "x-request-id": requestId } },
-    );
+    return apiError(requestId, "PAYMENT_UPDATE_FAILED", "The payment status could not be applied.", 502);
   }
 
   const duplicate = order.payment_status === normalizedStatus;
@@ -271,7 +235,7 @@ export async function POST(request: Request) {
   });
 
   return NextResponse.json(
-    { received: true },
-    { headers: { "x-request-id": requestId } },
+    { received: true, requestId },
+    { headers: { "x-request-id": requestId, "Cache-Control": "no-store, max-age=0" } },
   );
 }
