@@ -13,8 +13,10 @@ const halos = [
 
 export function HaloCollection() {
   const sectionRef = useRef<HTMLElement>(null);
+  const activeIndexRef = useRef(0);
+  const endingVisibleRef = useRef(false);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [progress, setProgress] = useState(0);
+  const [endingVisible, setEndingVisible] = useState(false);
 
   useEffect(() => {
     const section = sectionRef.current;
@@ -26,11 +28,20 @@ export function HaloCollection() {
       frame = 0;
       const rect = section.getBoundingClientRect();
       const scrollable = Math.max(1, section.offsetHeight - window.innerHeight);
-      const nextProgress = Math.min(1, Math.max(0, -rect.top / scrollable));
-      const sequenceProgress = Math.min(0.999, nextProgress / 0.82);
+      const progress = Math.min(1, Math.max(0, -rect.top / scrollable));
+      const sequenceProgress = Math.min(0.999, progress / 0.82);
+      const nextIndex = Math.min(halos.length - 1, Math.floor(sequenceProgress * halos.length));
+      const nextEndingVisible = progress >= 0.84;
 
-      setProgress(nextProgress);
-      setActiveIndex(Math.min(halos.length - 1, Math.floor(sequenceProgress * halos.length)));
+      if (nextIndex !== activeIndexRef.current) {
+        activeIndexRef.current = nextIndex;
+        setActiveIndex(nextIndex);
+      }
+
+      if (nextEndingVisible !== endingVisibleRef.current) {
+        endingVisibleRef.current = nextEndingVisible;
+        setEndingVisible(nextEndingVisible);
+      }
     };
 
     const schedule = () => {
@@ -49,7 +60,6 @@ export function HaloCollection() {
   }, []);
 
   const active = halos[activeIndex];
-  const endingVisible = progress >= 0.84;
 
   return (
     <section
@@ -98,7 +108,7 @@ export function HaloCollection() {
             ))}
           </div>
           <img src={`/images/halo/halo-${active.slug}.webp`} alt={`${active.name} VISR Carry display`} />
-          <div className="halo-object__wash" aria-hidden="true" />
+          <div className="halo-object__specular" aria-hidden="true" />
         </div>
 
         <div className="halo-copy visr-container" data-ending={endingVisible}>
@@ -127,16 +137,6 @@ export function HaloCollection() {
             <h3>Choose your Halo.</h3>
             <p>Five distinct atmospheres. One display system.</p>
             <a href="/checkout">Reserve your Halo</a>
-          </div>
-          <div className="halo-lineup" aria-label="Five Halo colour identities">
-            {halos.map((halo) => (
-              <figure key={halo.slug} style={{ "--halo-rgb": halo.rgb } as CSSProperties}>
-                <div>
-                  <img src={`/images/halo/halo-${halo.slug}.webp`} alt="" />
-                </div>
-                <figcaption>{halo.name.replace(" Halo", "")}</figcaption>
-              </figure>
-            ))}
           </div>
         </div>
       </div>
@@ -177,11 +177,10 @@ export function HaloCollection() {
         .halo-atmosphere,
         .halo-finale-ambient {
           position: absolute;
-          inset: -18%;
+          inset: 0;
           opacity: 0;
-          transform: translate3d(0, 0, 0) scale(1.02);
-          will-change: opacity, transform;
-          transition: opacity 1200ms cubic-bezier(0.22, 1, 0.36, 1);
+          transform: translate3d(0, 0, 0);
+          transition: opacity 1000ms cubic-bezier(0.22, 1, 0.36, 1);
         }
 
         .halo-atmosphere::before,
@@ -192,32 +191,35 @@ export function HaloCollection() {
         }
 
         .halo-atmosphere::before {
-          inset: 5% 8% 10%;
+          inset: 8% 6% 10%;
           background:
             radial-gradient(
-              ellipse at 50% 48%,
-              rgb(var(--halo-rgb) / 0.22) 0%,
-              rgb(var(--halo-rgb) / 0.09) 28%,
-              transparent 62%
+              ellipse 36% 44% at 50% 49%,
+              rgb(var(--halo-rgb) / 0.13) 0%,
+              rgb(var(--halo-rgb) / 0.055) 46%,
+              transparent 76%
             ),
             radial-gradient(
-              ellipse at 50% 66%,
-              rgb(var(--halo-rgb) / 0.09) 0%,
-              transparent 58%
+              ellipse 58% 34% at 50% 70%,
+              rgb(255 255 255 / 0.025),
+              transparent 72%
             );
-          filter: blur(30px);
-          animation: halo-ambient-breathe 8s ease-in-out infinite;
+          opacity: 0.82;
+          animation: halo-ambient-breathe 9s ease-in-out infinite;
         }
 
         .halo-atmosphere::after {
-          inset: 22% 20% 14%;
-          background: radial-gradient(
-            ellipse at 50% 48%,
-            rgb(var(--halo-rgb) / 0.2),
-            transparent 64%
+          inset: 10% 18% 8%;
+          background: linear-gradient(
+            90deg,
+            transparent 0%,
+            transparent 37%,
+            rgb(var(--halo-rgb) / 0.028) 50%,
+            transparent 63%,
+            transparent 100%
           );
-          filter: blur(54px);
-          animation: halo-ambient-pulse 11s ease-in-out infinite;
+          filter: blur(18px);
+          opacity: 0.65;
         }
 
         .halo-atmosphere[data-active="true"] {
@@ -227,17 +229,11 @@ export function HaloCollection() {
         .halo-finale-ambient {
           background:
             radial-gradient(
-              ellipse at 50% 46%,
-              rgb(255 255 255 / 0.075),
-              transparent 38%
+              ellipse 60% 48% at 50% 53%,
+              rgb(255 255 255 / 0.045),
+              transparent 68%
             ),
-            radial-gradient(
-              ellipse at 50% 74%,
-              rgb(172 180 190 / 0.055),
-              transparent 54%
-            );
-          filter: blur(22px);
-          transform: translate3d(0, 0, 0) scale(1);
+            linear-gradient(180deg, #020202 0%, #070707 52%, #020202 100%);
         }
 
         .halo-stage[data-ending="true"] .halo-atmosphere {
@@ -256,12 +252,12 @@ export function HaloCollection() {
           background:
             linear-gradient(
               180deg,
-              rgb(0 0 0 / 0.68),
-              transparent 26%,
-              transparent 66%,
-              rgb(0 0 0 / 0.9)
+              rgb(0 0 0 / 0.72),
+              transparent 25%,
+              transparent 67%,
+              rgb(0 0 0 / 0.92)
             ),
-            radial-gradient(circle at center, transparent 30%, rgb(0 0 0 / 0.6));
+            radial-gradient(ellipse at center, transparent 38%, rgb(0 0 0 / 0.56) 100%);
         }
 
         .halo-header {
@@ -273,6 +269,15 @@ export function HaloCollection() {
           display: flex;
           justify-content: space-between;
           gap: 2rem;
+          transition:
+            opacity 500ms ease,
+            transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        .halo-stage[data-ending="true"] .halo-header {
+          opacity: 0;
+          transform: translate3d(0, -12px, 0);
+          pointer-events: none;
         }
 
         .halo-header p {
@@ -311,7 +316,7 @@ export function HaloCollection() {
 
         .halo-object[data-ending="true"] {
           opacity: 0;
-          transform: translate3d(-50%, -48%, 0) scale(0.92);
+          transform: translate3d(-50%, -48%, 0) scale(0.95);
         }
 
         .halo-object > img {
@@ -321,7 +326,7 @@ export function HaloCollection() {
           width: 100%;
           height: 100%;
           object-fit: contain;
-          filter: drop-shadow(0 22px 30px rgb(0 0 0 / 0.38));
+          filter: drop-shadow(0 22px 30px rgb(0 0 0 / 0.42));
         }
 
         .halo-lighting {
@@ -337,8 +342,7 @@ export function HaloCollection() {
           inset: 0;
           opacity: 0;
           transform: translate3d(0, 0, 0);
-          will-change: opacity;
-          transition: opacity 1100ms cubic-bezier(0.22, 1, 0.36, 1);
+          transition: opacity 900ms cubic-bezier(0.22, 1, 0.36, 1);
         }
 
         .halo-light[data-active="true"] {
@@ -352,75 +356,80 @@ export function HaloCollection() {
         }
 
         .halo-light__backlight {
-          inset: 17% 7% 8%;
-          border-radius: 50%;
-          background:
-            radial-gradient(
-              ellipse at 50% 48%,
-              rgb(var(--halo-rgb) / 0.42) 0%,
-              rgb(var(--halo-rgb) / 0.17) 34%,
-              transparent 70%
-            );
-          filter: blur(34px);
-          animation: halo-backlight-breathe 6.8s ease-in-out infinite;
-        }
-
-        .halo-light__rim {
-          inset: 12% 5% 9%;
-          border: 1px solid rgb(var(--halo-rgb) / 0.26);
+          inset: 20% 14% 12%;
           border-radius: 48%;
           background: radial-gradient(
             ellipse at 50% 50%,
-            transparent 56%,
-            rgb(var(--halo-rgb) / 0.12) 73%,
-            transparent 79%
+            rgb(var(--halo-rgb) / 0.26) 0%,
+            rgb(var(--halo-rgb) / 0.09) 38%,
+            transparent 70%
           );
-          filter: blur(7px);
+          filter: blur(20px);
+          opacity: 0.76;
+          animation: halo-backlight-breathe 8s ease-in-out infinite;
+        }
+
+        .halo-light__rim {
+          inset: 14% 9% 11%;
+          border-radius: 46%;
+          background:
+            linear-gradient(
+              90deg,
+              rgb(var(--halo-rgb) / 0.22) 0%,
+              transparent 11%,
+              transparent 89%,
+              rgb(var(--halo-rgb) / 0.22) 100%
+            ),
+            radial-gradient(
+              ellipse at center,
+              transparent 58%,
+              rgb(255 255 255 / 0.055) 65%,
+              transparent 72%
+            );
+          filter: blur(4px);
+          opacity: 0.48;
           mask-image: linear-gradient(
-            115deg,
-            transparent 5%,
-            #000 27%,
-            #000 66%,
-            transparent 94%
+            180deg,
+            transparent 2%,
+            #000 24%,
+            #000 78%,
+            transparent 98%
           );
-          animation: halo-rim-pulse 9s ease-in-out infinite;
+          animation: halo-rim-breathe 10s ease-in-out infinite;
         }
 
         .halo-light__reflection {
-          right: 13%;
-          bottom: 3%;
-          left: 13%;
-          height: 17%;
+          right: 18%;
+          bottom: 4%;
+          left: 18%;
+          height: 12%;
           border-radius: 50%;
           background: radial-gradient(
             ellipse,
-            rgb(var(--halo-rgb) / 0.2) 0%,
-            rgb(var(--halo-rgb) / 0.07) 38%,
+            rgb(var(--halo-rgb) / 0.13) 0%,
+            rgb(255 255 255 / 0.025) 42%,
             transparent 72%
           );
-          filter: blur(20px);
+          filter: blur(13px);
+          opacity: 0.52;
           transform: scaleY(0.42);
-          opacity: 0.72;
-          animation: halo-reflection-pulse 8.5s ease-in-out infinite;
+          animation: halo-reflection-breathe 9s ease-in-out infinite;
         }
 
-        .halo-object__wash {
+        .halo-object__specular {
           position: absolute;
           z-index: 4;
-          inset: 5% 4%;
+          inset: 7% 8%;
           background: linear-gradient(
-            135deg,
-            transparent 28%,
-            rgb(var(--active-rgb) / 0.13) 55%,
-            transparent 78%
+            118deg,
+            transparent 34%,
+            rgb(255 255 255 / 0.07) 49%,
+            transparent 62%
           );
           mix-blend-mode: screen;
-          mask-image: radial-gradient(ellipse at center, #000 22%, transparent 72%);
-          opacity: 0.72;
-          transition:
-            background-color 900ms ease,
-            opacity 900ms ease;
-          animation: halo-wash-drift 12s ease-in-out infinite;
+          mask-image: radial-gradient(ellipse at center, #000 20%, transparent 73%);
+          opacity: 0.18;
+          animation: halo-specular-breathe 12s ease-in-out infinite;
         }
 
         .halo-copy {
@@ -493,6 +502,11 @@ export function HaloCollection() {
           align-items: flex-end;
           gap: 0.4rem;
           transform: translateY(-50%);
+          transition: opacity 500ms ease;
+        }
+
+        .halo-stage[data-ending="true"] .halo-rail {
+          opacity: 0;
         }
 
         .halo-rail span {
@@ -515,9 +529,8 @@ export function HaloCollection() {
           inset: 0;
           display: grid;
           align-content: center;
-          gap: 3rem;
           opacity: 0;
-          transform: translate3d(0, 30px, 0);
+          transform: translate3d(0, 26px, 0);
           pointer-events: none;
           transition:
             opacity 850ms ease,
@@ -531,7 +544,12 @@ export function HaloCollection() {
           pointer-events: auto;
         }
 
+        .halo-finale > div {
+          max-width: 62rem;
+        }
+
         .halo-finale h3 {
+          max-width: 8ch;
           margin: 0;
           font-size: clamp(3.5rem, 9vw, 8rem);
           font-weight: 400;
@@ -540,6 +558,7 @@ export function HaloCollection() {
         }
 
         .halo-finale > div > p:last-of-type {
+          margin-top: 1.15rem;
           color: rgb(247 247 245 / 0.48);
         }
 
@@ -552,46 +571,14 @@ export function HaloCollection() {
           color: inherit;
           font-size: 0.78rem;
           text-decoration: none;
+          transition:
+            border-color 250ms ease,
+            background-color 250ms ease;
         }
 
-        .halo-lineup {
-          display: grid;
-          grid-template-columns: repeat(5, minmax(0, 1fr));
-          gap: 0.65rem;
-          width: 100%;
-          min-width: 0;
-          overflow: hidden;
-        }
-
-        .halo-lineup figure {
-          margin: 0;
-          min-width: 0;
-        }
-
-        .halo-lineup figure div {
-          position: relative;
-          width: 100%;
-          overflow: hidden;
-          aspect-ratio: 4 / 5;
-          border: 1px solid rgb(var(--halo-rgb) / 0.28);
-          background: #050505;
-        }
-
-        .halo-lineup img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-        }
-
-        .halo-lineup figcaption {
-          margin-top: 0.55rem;
-          overflow: hidden;
-          color: rgb(var(--halo-rgb) / 0.9);
-          font-size: 0.6rem;
-          letter-spacing: 0.12em;
-          text-overflow: ellipsis;
-          text-transform: uppercase;
-          white-space: nowrap;
+        .halo-finale a:hover {
+          border-color: rgb(247 247 245 / 0.42);
+          background: rgb(247 247 245 / 0.04);
         }
 
         .halo-scroll-map {
@@ -605,72 +592,56 @@ export function HaloCollection() {
         @keyframes halo-ambient-breathe {
           0%,
           100% {
-            opacity: 0.78;
-            transform: scale(0.98);
+            opacity: 0.72;
+            transform: scale(0.99);
           }
           50% {
-            opacity: 1;
-            transform: scale(1.035);
-          }
-        }
-
-        @keyframes halo-ambient-pulse {
-          0%,
-          100% {
-            opacity: 0.48;
-            transform: translate3d(-1%, 0, 0) scale(0.96);
-          }
-          50% {
-            opacity: 0.78;
-            transform: translate3d(1%, -1%, 0) scale(1.04);
+            opacity: 0.88;
+            transform: scale(1.012);
           }
         }
 
         @keyframes halo-backlight-breathe {
           0%,
           100% {
-            opacity: 0.76;
-            transform: scale(0.98);
-          }
-          50% {
-            opacity: 1;
-            transform: scale(1.035);
-          }
-        }
-
-        @keyframes halo-rim-pulse {
-          0%,
-          100% {
-            opacity: 0.38;
+            opacity: 0.68;
             transform: scale(0.99);
           }
           50% {
-            opacity: 0.7;
+            opacity: 0.82;
             transform: scale(1.018);
           }
         }
 
-        @keyframes halo-reflection-pulse {
+        @keyframes halo-rim-breathe {
           0%,
           100% {
-            opacity: 0.48;
-            transform: scaleX(0.96) scaleY(0.4);
+            opacity: 0.38;
           }
           50% {
-            opacity: 0.76;
-            transform: scaleX(1.04) scaleY(0.46);
+            opacity: 0.5;
           }
         }
 
-        @keyframes halo-wash-drift {
+        @keyframes halo-reflection-breathe {
           0%,
           100% {
-            opacity: 0.46;
-            transform: translate3d(-1%, 0, 0);
+            opacity: 0.42;
+            transform: scaleX(0.98) scaleY(0.4);
           }
           50% {
-            opacity: 0.74;
-            transform: translate3d(1%, -0.5%, 0);
+            opacity: 0.54;
+            transform: scaleX(1.02) scaleY(0.44);
+          }
+        }
+
+        @keyframes halo-specular-breathe {
+          0%,
+          100% {
+            opacity: 0.13;
+          }
+          50% {
+            opacity: 0.2;
           }
         }
 
@@ -703,7 +674,7 @@ export function HaloCollection() {
           }
 
           .halo-object[data-ending="true"] {
-            transform: translate3d(-50%, -46%, 0) scale(0.94);
+            transform: translate3d(-50%, -46%, 0) scale(0.96);
           }
 
           .halo-object > img {
@@ -711,30 +682,35 @@ export function HaloCollection() {
             max-width: none;
           }
 
-          .halo-light__backlight {
-            inset: 20% 3% 10%;
-            filter: blur(25px);
-          }
-
-          .halo-light__rim {
-            inset: 15% 2% 11%;
-            filter: blur(5px);
-          }
-
-          .halo-light__reflection {
-            right: 7%;
-            left: 7%;
-            filter: blur(16px);
-          }
-
           .halo-atmosphere::before {
-            inset: 8% 0 12%;
-            filter: blur(24px);
+            inset: 10% -8% 13%;
           }
 
           .halo-atmosphere::after {
-            inset: 26% 7% 16%;
-            filter: blur(38px);
+            display: none;
+          }
+
+          .halo-light__backlight {
+            inset: 23% 7% 14%;
+            filter: blur(16px);
+          }
+
+          .halo-light__rim {
+            inset: 17% 4% 13%;
+            filter: blur(3px);
+          }
+
+          .halo-light__reflection {
+            right: 11%;
+            bottom: 5%;
+            left: 11%;
+            filter: blur(10px);
+          }
+
+          .halo-object__specular {
+            inset: 9% 4%;
+            animation: none;
+            opacity: 0.14;
           }
 
           .halo-copy {
@@ -765,54 +741,31 @@ export function HaloCollection() {
             display: none;
           }
 
-          .halo-finale {
-            align-content: center;
-            gap: clamp(1.6rem, 4svh, 2.5rem);
-          }
-
           .halo-finale h3 {
             font-size: clamp(3.15rem, 14.5vw, 5.8rem);
           }
 
-          .halo-lineup {
-            grid-template-columns: repeat(5, minmax(0, 1fr));
-            gap: clamp(0.28rem, 1.5vw, 0.5rem);
-            overflow: hidden;
-            padding: 0;
-            overscroll-behavior-x: none;
-            touch-action: pan-y;
-          }
-
-          .halo-lineup figure div {
-            width: 100%;
-          }
-
-          .halo-lineup figcaption {
-            margin-top: 0.45rem;
-            font-size: clamp(0.42rem, 1.7vw, 0.54rem);
-            letter-spacing: 0.08em;
-          }
-
-          .halo-object__wash {
-            animation-duration: 15s;
+          .halo-finale > div > p:last-of-type {
+            max-width: 29rem;
           }
         }
 
         @media (prefers-reduced-motion: reduce) {
           .halo-atmosphere::before,
-          .halo-atmosphere::after,
           .halo-light__backlight,
           .halo-light__rim,
           .halo-light__reflection,
-          .halo-object__wash {
+          .halo-object__specular {
             animation: none;
           }
 
           .halo-atmosphere,
           .halo-finale-ambient,
+          .halo-header,
           .halo-object,
           .halo-light,
           .halo-copy article,
+          .halo-rail,
           .halo-finale {
             transition: none;
           }
