@@ -38,7 +38,7 @@ export const products = {
     name: "Halo Collection",
     price: 89_000,
     maxPerVariant: 1,
-    maxCombinedPerOrder: 6,
+    maxCombinedPerOrder: 5,
     weightGrams: 150,
     box: { lengthCm: 15, widthCm: 8, heightCm: 5 },
   },
@@ -58,7 +58,6 @@ export const haloVariants: HaloVariant[] = [
   { id: "crimson", name: "Halo Crimson", sku: "VISR-HALO-CRM", stock: 10 },
   { id: "ice", name: "Halo Ice", sku: "VISR-HALO-ICE", stock: 10 },
   { id: "emerald", name: "Halo Emerald", sku: "VISR-HALO-EMR", stock: 10 },
-  { id: "violet", name: "Halo Violet", sku: "VISR-HALO-VLT", stock: 10 },
   { id: "amber", name: "Halo Amber", sku: "VISR-HALO-AMB", stock: 10 },
   { id: "pink", name: "Halo Pink", sku: "VISR-HALO-PNK", stock: 10 },
 ];
