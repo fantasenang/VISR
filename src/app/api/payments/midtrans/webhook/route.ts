@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { elapsedMs, logger, requestIdFrom } from "@/lib/observability/logger";
 
 const notificationSchema = z.object({
   order_id: z.string().min(1).max(100),
@@ -48,12 +49,19 @@ function normalizePaymentStatus(transactionStatus: string, fraudStatus?: string)
 }
 
 export async function POST(request: Request) {
+  const requestId = requestIdFrom(request);
+  const startedAt = performance.now();
   const parsed = notificationSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
-    console.warn("MIDTRANS_WEBHOOK_INVALID_BODY", {
+    logger.warn("MIDTRANS_WEBHOOK_INVALID_BODY", {
+      requestId,
       issues: parsed.error.issues.map((issue) => issue.path.join(".")),
+      durationMs: elapsedMs(startedAt),
     });
-    return NextResponse.json({ error: "INVALID_NOTIFICATION" }, { status: 400 });
+    return NextResponse.json(
+      { error: "INVALID_NOTIFICATION" },
+      { status: 400, headers: { "x-request-id": requestId } },
+    );
   }
 
   const serverKey = process.env.MIDTRANS_SERVER_KEY;
@@ -62,7 +70,18 @@ export async function POST(request: Request) {
   const isProduction = process.env.MIDTRANS_IS_PRODUCTION === "true";
 
   if (!serverKey || !supabaseUrl || !serviceRoleKey) {
-    return NextResponse.json({ error: "PAYMENT_NOT_CONFIGURED" }, { status: 503 });
+    logger.error("MIDTRANS_WEBHOOK_CONFIGURATION_ERROR", {
+      requestId,
+      hasServerKey: Boolean(serverKey),
+      hasSupabaseUrl: Boolean(supabaseUrl),
+      hasServiceRoleKey: Boolean(serviceRoleKey),
+      environment: isProduction ? "production" : "sandbox",
+      durationMs: elapsedMs(startedAt),
+    });
+    return NextResponse.json(
+      { error: "PAYMENT_NOT_CONFIGURED" },
+      { status: 503, headers: { "x-request-id": requestId } },
+    );
   }
 
   const payload = parsed.data;
@@ -71,11 +90,17 @@ export async function POST(request: Request) {
     .digest("hex");
 
   if (!secureEqual(expectedSignature, payload.signature_key.toLowerCase())) {
-    console.warn("MIDTRANS_WEBHOOK_INVALID_SIGNATURE", {
+    logger.warn("MIDTRANS_WEBHOOK_INVALID_SIGNATURE", {
+      requestId,
       orderNumber: payload.order_id,
       transactionId: payload.transaction_id ?? null,
+      providerStatus: payload.transaction_status,
+      durationMs: elapsedMs(startedAt),
     });
-    return NextResponse.json({ error: "INVALID_SIGNATURE" }, { status: 401 });
+    return NextResponse.json(
+      { error: "INVALID_SIGNATURE" },
+      { status: 401, headers: { "x-request-id": requestId } },
+    );
   }
 
   const databaseHeaders = {
@@ -83,39 +108,70 @@ export async function POST(request: Request) {
     Authorization: `Bearer ${serviceRoleKey}`,
   };
 
+  const lookupStartedAt = performance.now();
   const orderResponse = await fetch(
     `${supabaseUrl}/rest/v1/orders?order_number=eq.${encodeURIComponent(payload.order_id)}&select=id,order_number,total_idr,payment_status&limit=1`,
     { headers: databaseHeaders, cache: "no-store" },
   );
+  const orderLookupDurationMs = elapsedMs(lookupStartedAt);
 
   if (!orderResponse.ok) {
-    return NextResponse.json({ error: "ORDER_LOOKUP_FAILED" }, { status: 502 });
+    logger.error("MIDTRANS_WEBHOOK_ORDER_LOOKUP_FAILED", {
+      requestId,
+      orderNumber: payload.order_id,
+      databaseStatus: orderResponse.status,
+      orderLookupDurationMs,
+      durationMs: elapsedMs(startedAt),
+    });
+    return NextResponse.json(
+      { error: "ORDER_LOOKUP_FAILED" },
+      { status: 502, headers: { "x-request-id": requestId } },
+    );
   }
 
   const orders = (await orderResponse.json()) as OrderRow[];
   const order = orders[0];
-  if (!order) return NextResponse.json({ error: "ORDER_NOT_FOUND" }, { status: 404 });
+  if (!order) {
+    logger.warn("MIDTRANS_WEBHOOK_ORDER_NOT_FOUND", {
+      requestId,
+      orderNumber: payload.order_id,
+      orderLookupDurationMs,
+      durationMs: elapsedMs(startedAt),
+    });
+    return NextResponse.json(
+      { error: "ORDER_NOT_FOUND" },
+      { status: 404, headers: { "x-request-id": requestId } },
+    );
+  }
 
   const notifiedAmount = parseGrossAmount(payload.gross_amount);
   if (notifiedAmount === null || notifiedAmount !== order.total_idr) {
-    console.error("MIDTRANS_WEBHOOK_AMOUNT_MISMATCH", {
+    logger.error("MIDTRANS_WEBHOOK_AMOUNT_MISMATCH", {
+      requestId,
       orderNumber: payload.order_id,
       expectedAmount: order.total_idr,
-      notifiedAmount: payload.gross_amount,
+      notifiedAmount,
+      transactionId: payload.transaction_id ?? null,
+      durationMs: elapsedMs(startedAt),
     });
-    return NextResponse.json({ error: "AMOUNT_MISMATCH" }, { status: 409 });
+    return NextResponse.json(
+      { error: "AMOUNT_MISMATCH" },
+      { status: 409, headers: { "x-request-id": requestId } },
+    );
   }
 
   let transactionStatus = payload.transaction_status;
   let fraudStatus = payload.fraud_status;
   let transactionId = payload.transaction_id ?? null;
   let verifiedStatus: MidtransStatusResponse | null = null;
+  let verificationDurationMs: number | null = null;
 
   const statusBaseUrl = isProduction
     ? "https://api.midtrans.com/v2"
     : "https://api.sandbox.midtrans.com/v2";
 
   try {
+    const verificationStartedAt = performance.now();
     const statusResponse = await fetch(`${statusBaseUrl}/${encodeURIComponent(payload.order_id)}/status`, {
       headers: {
         Authorization: `Basic ${Buffer.from(`${serverKey}:`).toString("base64")}`,
@@ -123,6 +179,7 @@ export async function POST(request: Request) {
       },
       cache: "no-store",
     });
+    verificationDurationMs = elapsedMs(verificationStartedAt);
 
     const candidate = (await statusResponse.json().catch(() => ({}))) as MidtransStatusResponse;
     const verifiedAmount = candidate.gross_amount ? parseGrossAmount(candidate.gross_amount) : null;
@@ -138,22 +195,26 @@ export async function POST(request: Request) {
       fraudStatus = candidate.fraud_status;
       transactionId = candidate.transaction_id ?? transactionId;
     } else {
-      console.warn("MIDTRANS_STATUS_VERIFICATION_SKIPPED", {
+      logger.warn("MIDTRANS_STATUS_VERIFICATION_SKIPPED", {
+        requestId,
         environment: isProduction ? "production" : "sandbox",
         orderNumber: order.order_number,
-        status: statusResponse.status,
-        statusMessage: candidate.status_message ?? null,
+        providerHttpStatus: statusResponse.status,
+        providerStatusMessage: candidate.status_message ?? null,
+        verificationDurationMs,
       });
     }
   } catch (error) {
-    console.warn("MIDTRANS_STATUS_VERIFICATION_UNAVAILABLE", {
+    logger.warn("MIDTRANS_STATUS_VERIFICATION_UNAVAILABLE", {
+      requestId,
       orderNumber: order.order_number,
       message: error instanceof Error ? error.message : "unknown",
+      verificationDurationMs,
     });
   }
 
   const normalizedStatus = normalizePaymentStatus(transactionStatus, fraudStatus);
-
+  const updateStartedAt = performance.now();
   const response = await fetch(`${supabaseUrl}/rest/v1/rpc/apply_midtrans_notification`, {
     method: "POST",
     headers: {
@@ -173,28 +234,44 @@ export async function POST(request: Request) {
     }),
     cache: "no-store",
   });
+  const databaseUpdateDurationMs = elapsedMs(updateStartedAt);
 
   if (!response.ok) {
-    const failure = await response.text().catch(() => "");
-    console.error("MIDTRANS_WEBHOOK_UPDATE_FAILED", {
+    logger.error("MIDTRANS_WEBHOOK_UPDATE_FAILED", {
+      requestId,
       orderNumber: order.order_number,
       transactionId,
       providerStatus: transactionStatus,
       normalizedStatus,
       databaseStatus: response.status,
-      response: failure.slice(0, 1000),
+      databaseUpdateDurationMs,
+      durationMs: elapsedMs(startedAt),
     });
-    return NextResponse.json({ error: "PAYMENT_UPDATE_FAILED" }, { status: 502 });
+    return NextResponse.json(
+      { error: "PAYMENT_UPDATE_FAILED" },
+      { status: 502, headers: { "x-request-id": requestId } },
+    );
   }
 
-  console.info("MIDTRANS_WEBHOOK_APPLIED", {
+  const duplicate = order.payment_status === normalizedStatus;
+  logger.info("MIDTRANS_WEBHOOK_APPLIED", {
+    requestId,
+    orderId: order.id,
     orderNumber: order.order_number,
     transactionId,
     previousStatus: order.payment_status,
     providerStatus: transactionStatus,
     normalizedStatus,
-    source: verifiedStatus ? "status_api" : "signed_notification",
+    duplicate,
+    verificationSource: verifiedStatus ? "status_api" : "signed_notification",
+    orderLookupDurationMs,
+    verificationDurationMs,
+    databaseUpdateDurationMs,
+    durationMs: elapsedMs(startedAt),
   });
 
-  return NextResponse.json({ received: true });
+  return NextResponse.json(
+    { received: true },
+    { headers: { "x-request-id": requestId } },
+  );
 }
