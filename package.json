@@ -10,7 +10,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "smoke:production": "node scripts/production-smoke.mjs"
   },
   "dependencies": {
     "@vercel/analytics": "^1.5.0",
