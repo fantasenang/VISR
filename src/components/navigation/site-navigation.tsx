@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 const items = [
-  { label: "Link", href: "#exhibition" },
+  { label: "Link", href: "#link-system" },
   { label: "Carry", href: "#carry" },
   { label: "Halo", href: "#halo" },
 ] as const;
