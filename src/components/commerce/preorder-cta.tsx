@@ -12,16 +12,17 @@ function formatRemaining(milliseconds: number) {
   return `${days}d ${String(hours).padStart(2, "0")}h ${String(minutes).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}s`;
 }
 
-export function PreorderCta() {
+export function PreorderCta({ forceOpen = false }: { forceOpen?: boolean }) {
   const [now, setNow] = useState(() => Date.now());
-  const phase: PreorderPhase = getPreorderPhase(now);
+  const phase: PreorderPhase = forceOpen ? "open" : getPreorderPhase(now);
   const target = getPreorderTarget(phase);
   const remaining = useMemo(() => formatRemaining(target - now), [now, target]);
 
   useEffect(() => {
+    if (forceOpen) return;
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [forceOpen]);
 
   if (phase === "open") {
     return (
@@ -30,7 +31,7 @@ export function PreorderCta() {
           Reserve Your VISR
         </a>
         <p className="mx-auto mt-5 max-w-lg text-xs leading-5 text-white/32">Preorder closes 13 August 2026 at 23.59 WIB, or earlier when 100 units are reserved.</p>
-        <p className="mt-3 font-mono text-xs tracking-[0.12em] text-white/55">CLOSES IN {remaining}</p>
+        {!forceOpen && <p className="mt-3 font-mono text-xs tracking-[0.12em] text-white/55">CLOSES IN {remaining}</p>}
       </>
     );
   }
