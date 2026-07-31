@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getChargeableWeightGrams, getPackingProfile } from "@/lib/shipping/packing";
 import { calculateDomesticRates, searchDomesticDestinations } from "@/lib/shipping/rajaongkir";
+import { elapsedMs, logger, requestIdFrom } from "@/lib/observability/logger";
 
 const requestSchema = z.object({
   destinationId: z.coerce.number().int().positive(),
@@ -14,6 +15,13 @@ const requestSchema = z.object({
 
 const supportedCouriers = new Set(["jne", "jnt"]);
 
+function apiError(requestId: string, code: string, message: string, status: number, details?: unknown) {
+  return NextResponse.json(
+    { error: { code, message, ...(details ? { details } : {}) }, requestId },
+    { status, headers: { "x-request-id": requestId, "Cache-Control": "no-store, max-age=0" } },
+  );
+}
+
 async function resolveOriginId() {
   const configured = Number(process.env.RAJAONGKIR_ORIGIN_ID);
   if (Number.isInteger(configured) && configured > 0) return configured;
@@ -25,9 +33,16 @@ async function resolveOriginId() {
 }
 
 export async function POST(request: Request) {
+  const requestId = requestIdFrom(request);
+  const startedAt = performance.now();
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: "INVALID_SHIPPING_REQUEST", details: parsed.error.flatten() }, { status: 400 });
+    logger.warn("SHIPPING_RATE_VALIDATION_FAILED", {
+      requestId,
+      issues: parsed.error.issues.map((issue) => issue.path.join(".")),
+      durationMs: elapsedMs(startedAt),
+    });
+    return apiError(requestId, "INVALID_SHIPPING_REQUEST", "The shipping request is invalid.", 400, parsed.error.flatten());
   }
 
   try {
@@ -51,9 +66,6 @@ export async function POST(request: Request) {
       }),
     ]);
 
-    // RajaOngkir may return route-specific services such as CTC for same-city
-    // deliveries. Do not hard-code REG/YES/NDD here; expose every service that
-    // the supported courier confirms is available for the selected destination.
     const rates = [...jneRates, ...jntRates]
       .filter((rate) => supportedCouriers.has(rate.courierCode))
       .filter((rate) => Number.isFinite(rate.costIdr) && rate.costIdr >= 0)
@@ -68,6 +80,13 @@ export async function POST(request: Request) {
       }))
       .sort((a, b) => a.costIdr - b.costIdr);
 
+    logger.info("SHIPPING_RATES_CALCULATED", {
+      requestId,
+      destinationId: parsed.data.destinationId,
+      resultCount: rates.length,
+      durationMs: elapsedMs(startedAt),
+    });
+
     return NextResponse.json(
       {
         rates,
@@ -79,12 +98,20 @@ export async function POST(request: Request) {
           jneChargeableWeightGrams: jneWeight.chargeableWeightGrams,
           jntChargeableWeightGrams: jntWeight.chargeableWeightGrams,
         },
+        requestId,
       },
-      { headers: { "Cache-Control": "no-store, max-age=0" } },
+      { headers: { "x-request-id": requestId, "Cache-Control": "no-store, max-age=0" } },
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : "SHIPPING_RATE_FAILED";
-    const status = message === "RAJAONGKIR_NOT_CONFIGURED" ? 503 : message === "RAJAONGKIR_RATE_LIMITED" ? 429 : 502;
-    return NextResponse.json({ error: message }, { status });
+    const code = error instanceof Error ? error.message : "SHIPPING_RATE_FAILED";
+    const status = code === "RAJAONGKIR_NOT_CONFIGURED" ? 503 : code === "RAJAONGKIR_RATE_LIMITED" ? 429 : 502;
+    logger.error("SHIPPING_RATE_FAILED", {
+      requestId,
+      code,
+      status,
+      destinationId: parsed.data.destinationId,
+      durationMs: elapsedMs(startedAt),
+    });
+    return apiError(requestId, code, "Shipping rates are temporarily unavailable.", status);
   }
 }
