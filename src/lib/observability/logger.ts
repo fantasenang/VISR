@@ -3,10 +3,12 @@ type LogLevel = "info" | "warn" | "error";
 type LogContext = Record<string, unknown>;
 
 const SENSITIVE_KEYS = /authorization|proxy-authorization|cookie|set-cookie|token|secret|password|passphrase|server.?key|service.?role|api.?key|signature|raw.?payload|address|whatsapp|phone|email|card|cvv|pin/i;
+const REQUEST_ID_PATTERN = /^[A-Za-z0-9._:-]{8,128}$/;
 const SECRET_VALUE_PATTERNS = [
   /Bearer\s+[A-Za-z0-9._~+\/-]+=*/gi,
   /Basic\s+[A-Za-z0-9+/=]+/gi,
-  /(?:sk|sb|pk)_[A-Za-z0-9_-]{12,}/g,
+  /(?:sk|sb|pk|service_role|server_key)[_-][A-Za-z0-9_-]{12,}/gi,
+  /eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}(?:\.[A-Za-z0-9_-]{10,})?/g,
 ];
 
 function maskEmail(value: string) {
@@ -22,7 +24,8 @@ function maskPhone(value: string) {
 }
 
 function redactSecretPatterns(value: string) {
-  return SECRET_VALUE_PATTERNS.reduce((result, pattern) => result.replace(pattern, "[REDACTED]"), value);
+  return SECRET_VALUE_PATTERNS.reduce((result, pattern) => result.replace(pattern, "[REDACTED]"), value)
+    .replace(/[\u0000-\u001F\u007F]/g, " ");
 }
 
 function sanitizeValue(key: string, value: unknown, depth = 0): unknown {
@@ -34,6 +37,7 @@ function sanitizeValue(key: string, value: unknown, depth = 0): unknown {
     return "[REDACTED]";
   }
   if (Array.isArray(value)) return value.slice(0, 50).map((item) => sanitizeValue(key, item, depth + 1));
+  if (value instanceof Error) return { name: value.name, message: redactSecretPatterns(value.message).slice(0, 1000) };
   if (typeof value === "object") return sanitizeContext(value as LogContext, depth + 1);
   if (typeof value === "string") {
     const redacted = redactSecretPatterns(value);
@@ -47,7 +51,8 @@ export function sanitizeContext(context: LogContext = {}, depth = 0) {
 }
 
 export function requestIdFrom(request: Request) {
-  return request.headers.get("x-request-id") ?? crypto.randomUUID();
+  const incoming = request.headers.get("x-request-id")?.trim();
+  return incoming && REQUEST_ID_PATTERN.test(incoming) ? incoming : crypto.randomUUID();
 }
 
 export function elapsedMs(startedAt: number) {
@@ -58,7 +63,7 @@ export function log(level: LogLevel, event: string, context: LogContext = {}) {
   const payload = JSON.stringify({
     timestamp: new Date().toISOString(),
     level: level.toUpperCase(),
-    event,
+    event: redactSecretPatterns(event).slice(0, 100),
     ...sanitizeContext(context),
   });
   if (level === "error") console.error(payload);
