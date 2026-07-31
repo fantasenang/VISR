@@ -11,7 +11,6 @@ const FRIENDLY_ERRORS: Record<string, string> = {
 const COPY_REPLACEMENTS: Array<[string, string]> = [
   ["VISR Private Reservation", "VISR Carry Gen 2 — Batch 2 Preorder"],
   ["Complete your Batch 2 reservation.", "Reserve your VISR Carry Gen 2."],
-  ["Includes 1 VISR Link · 500 g product weight", "Includes 2 VISR Links · Diecast car sold separately"],
   ["Choose your halo.", "Add a Halo Collection."],
   ["Each Halo is 150 g. One per color.", "Optional add-on · sold separately · one per color"],
   ["25 g each · for wall, desk, and future VISR systems.", "Optional add-on for wall, desk, and future VISR systems."],
