@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "node scripts/rename-visr-carry.mjs && npm run security:check && npm run observability:check && next build",
+    "build": "npm run security:check && npm run observability:check && next build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
