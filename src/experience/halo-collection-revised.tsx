@@ -7,8 +7,8 @@ const halos = [
   {
     slug: "crimson",
     name: "Crimson Halo",
-    line: "Bold Presence",
-    description: "A decisive red atmosphere that turns the display into a statement without taking attention away from the build.",
+    line: "Bold Edge",
+    description: "A deep red edge treatment that becomes more pronounced when external light enters the visor.",
     accent: "#b91f2e",
     glow: "rgb(220 38 56 / 62%)",
     aura: "rgb(185 31 46 / 18%)",
@@ -16,8 +16,8 @@ const halos = [
   {
     slug: "ice",
     name: "Ice Halo",
-    line: "Pure Focus",
-    description: "A colder, cleaner light that removes visual noise and sharpens every line of the collection.",
+    line: "Clear Edge",
+    description: "A pale, cool edge treatment that gives the visor a restrained luminous outline under direct light.",
     accent: "#d8eff5",
     glow: "rgb(216 239 245 / 62%)",
     aura: "rgb(190 229 239 / 17%)",
@@ -25,8 +25,8 @@ const halos = [
   {
     slug: "emerald",
     name: "Emerald Halo",
-    line: "Quiet Depth",
-    description: "A composed green atmosphere with depth that reveals itself slowly around darker builds.",
+    line: "Deep Edge",
+    description: "A composed green edge treatment that reveals more depth as light travels through the visor material.",
     accent: "#187a55",
     glow: "rgb(24 122 85 / 68%)",
     aura: "rgb(24 122 85 / 18%)",
@@ -34,8 +34,8 @@ const halos = [
   {
     slug: "amber",
     name: "Amber Halo",
-    line: "Warm Precision",
-    description: "A warm architectural light that gives the display the restrained calm of a private gallery.",
+    line: "Warm Edge",
+    description: "A warm amber edge treatment that becomes visually brighter when the visor is struck by light.",
     accent: "#d48722",
     glow: "rgb(212 135 34 / 66%)",
     aura: "rgb(212 135 34 / 18%)",
@@ -43,8 +43,8 @@ const halos = [
   {
     slug: "pink",
     name: "Pink Halo",
-    line: "Unexpected Elegance",
-    description: "A playful light held inside a precise display system—unexpected, controlled, and unmistakably personal.",
+    line: "Soft Edge",
+    description: "A soft pink edge treatment that creates a controlled glowing impression without an internal light source.",
     accent: "#e58cac",
     glow: "rgb(229 140 172 / 65%)",
     aura: "rgb(229 140 172 / 18%)",
@@ -65,15 +65,15 @@ export function HaloCollection() {
     >
       <div className={styles.inner}>
         <header className={styles.header}>
-          <p className={styles.eyebrow}>Halo Collection</p>
+          <p className={styles.eyebrow}>Halo / Prototype</p>
           <p className={styles.counter}>H01—H05</p>
         </header>
 
         <h2 id="halo-collection-title" className={styles.title}>
-          A light for every build.
+          Color held at the edge.
         </h2>
         <p className={styles.intro}>
-          Halo changes the atmosphere around the collection. Select a character and let the display take on a different presence.
+          Halo is a visor prototype with a colored edge. It does not emit light—the edge appears to glow when external light enters and travels through the material.
         </p>
 
         <div className={styles.stage}>
@@ -81,7 +81,7 @@ export function HaloCollection() {
             <img
               key={activeHalo.slug}
               src={`/images/halo/halo-${activeHalo.slug}.webp`}
-              alt={`${activeHalo.name} installed on VISR Carry`}
+              alt={`${activeHalo.name} colored-edge visor prototype installed on VISR Carry`}
               width={447}
               height={558}
               loading="lazy"
@@ -103,7 +103,7 @@ export function HaloCollection() {
           </div>
         </div>
 
-        <div className={styles.selector} role="group" aria-label="Choose a Halo color">
+        <div className={styles.selector} role="group" aria-label="Choose a Halo edge color">
           {halos.map((halo, index) => {
             const selectorStyle = {
               "--halo-accent": halo.accent,
@@ -131,11 +131,11 @@ export function HaloCollection() {
 
         <footer className={styles.footer}>
           <p className={styles.availability}>
-            Available separately. Designed to lock directly into VISR Carry through the VISR Link system.
+            Prototype in development. Final color, edge finish, and material response may change.
           </p>
-          <a href="/checkout" className={styles.cta}>
-            Reserve your Halo
-          </a>
+          <span className={styles.cta} aria-label="Halo is not yet available">
+            Prototype / Not yet available
+          </span>
         </footer>
       </div>
     </section>
