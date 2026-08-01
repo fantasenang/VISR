@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import styles from "./halo-collection.module.css";
 
 const halos = [
@@ -53,8 +53,45 @@ const halos = [
 
 export function HaloCollection() {
   const [activeIndex, setActiveIndex] = useState(0);
+  const stepRefs = useRef<Array<HTMLDivElement | null>>([]);
   const activeHalo = halos[activeIndex];
-  const sectionStyle = { "--halo-aura": activeHalo.aura } as CSSProperties;
+  const sectionStyle = {
+    "--halo-aura": activeHalo.aura,
+    "--halo-accent": activeHalo.accent,
+    "--halo-glow": activeHalo.glow,
+  } as CSSProperties;
+
+  useEffect(() => {
+    const steps = stepRefs.current.filter((step): step is HTMLDivElement => Boolean(step));
+
+    if (!steps.length || typeof IntersectionObserver === "undefined") {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const activeEntry = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+
+        if (!activeEntry) {
+          return;
+        }
+
+        const nextIndex = Number((activeEntry.target as HTMLElement).dataset.haloIndex);
+        if (Number.isInteger(nextIndex)) {
+          setActiveIndex(nextIndex);
+        }
+      },
+      {
+        rootMargin: "-38% 0px -38% 0px",
+        threshold: [0, 0.25, 0.5, 0.75],
+      },
+    );
+
+    steps.forEach((step) => observer.observe(step));
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <section
@@ -63,7 +100,7 @@ export function HaloCollection() {
       style={sectionStyle}
       aria-labelledby="halo-collection-title"
     >
-      <div className={styles.inner}>
+      <div className={styles.introduction}>
         <header className={styles.header}>
           <p className={styles.eyebrow}>Halo Collection</p>
           <p className={styles.counter}>H01—H05</p>
@@ -75,69 +112,75 @@ export function HaloCollection() {
         <p className={styles.intro}>
           A colored-edge visor designed to catch surrounding light and trace the silhouette of VISR Carry with a distinct luminous character. Five edge colors, each changing the presence of the display.
         </p>
+      </div>
 
-        <div className={styles.stage}>
-          <div className={styles.media}>
-            <img
-              key={activeHalo.slug}
-              src={`/images/halo/halo-${activeHalo.slug}.webp`}
-              alt={`${activeHalo.name} colored-edge visor installed on VISR Carry`}
-              width={447}
-              height={558}
-              loading="lazy"
-              decoding="async"
-              className={styles.image}
-            />
+      <div className={styles.story}>
+        <div className={styles.sticky}>
+          <div className={styles.stickyInner}>
+            <div className={styles.stage}>
+              <div className={styles.media}>
+                <img
+                  key={activeHalo.slug}
+                  src={`/images/halo/halo-${activeHalo.slug}.webp`}
+                  alt={`${activeHalo.name} colored-edge visor installed on VISR Carry`}
+                  width={447}
+                  height={558}
+                  loading="lazy"
+                  decoding="async"
+                  className={styles.image}
+                />
 
-            <div className={styles.visualLabel} aria-live="polite">
-              <p className={styles.activeIndex}>
-                {String(activeIndex + 1).padStart(2, "0")} / 05
-              </p>
-              <h3 className={styles.name}>{activeHalo.name}</h3>
-              <p className={styles.line}>{activeHalo.line}</p>
+                <div key={`${activeHalo.slug}-label`} className={styles.visualLabel} aria-live="polite">
+                  <p className={styles.activeIndex}>
+                    {String(activeIndex + 1).padStart(2, "0")} / 05
+                  </p>
+                  <h3 className={styles.name}>{activeHalo.name}</h3>
+                  <p className={styles.line}>{activeHalo.line}</p>
+                </div>
+              </div>
+
+              <div key={`${activeHalo.slug}-detail`} className={styles.detail}>
+                <p className={styles.description}>{activeHalo.description}</p>
+              </div>
+            </div>
+
+            <div className={styles.progress} aria-hidden="true">
+              <div className={styles.progressTrack}>
+                {halos.map((halo, index) => (
+                  <span
+                    key={halo.slug}
+                    className={styles.progressSegment}
+                    data-active={activeIndex === index}
+                  />
+                ))}
+              </div>
+              <p>Scroll to shift the edge</p>
             </div>
           </div>
-
-          <div className={styles.detail}>
-            <p className={styles.description}>{activeHalo.description}</p>
-          </div>
         </div>
 
-        <div className={styles.selector} role="group" aria-label="Choose a Halo edge color">
-          {halos.map((halo, index) => {
-            const selectorStyle = {
-              "--halo-accent": halo.accent,
-              "--halo-glow": halo.glow,
-            } as CSSProperties;
-
-            return (
-              <button
-                key={halo.slug}
-                type="button"
-                className={styles.selectorButton}
-                style={selectorStyle}
-                aria-label={`Show ${halo.name}`}
-                aria-pressed={activeIndex === index}
-                onClick={() => setActiveIndex(index)}
-              >
-                <span className={styles.selectorVisual} aria-hidden="true">
-                  <span className={styles.selectorSwatch} />
-                </span>
-                <span className={styles.selectorIndex}>{String(index + 1).padStart(2, "0")}</span>
-              </button>
-            );
-          })}
+        <div className={styles.steps} aria-hidden="true">
+          {halos.map((halo, index) => (
+            <div
+              key={halo.slug}
+              ref={(node) => {
+                stepRefs.current[index] = node;
+              }}
+              className={styles.step}
+              data-halo-index={index}
+            />
+          ))}
         </div>
-
-        <footer className={styles.footer}>
-          <p className={styles.availability}>
-            Five edge colors. Designed for VISR Carry and shaped by the light around it.
-          </p>
-          <span className={styles.cta} aria-label="Halo Collection coming soon">
-            Coming Soon
-          </span>
-        </footer>
       </div>
+
+      <footer className={styles.footer}>
+        <p className={styles.availability}>
+          Five edge colors. Designed for VISR Carry and shaped by the light around it.
+        </p>
+        <span className={styles.cta} aria-label="Halo Collection coming soon">
+          Coming Soon
+        </span>
+      </footer>
     </section>
   );
 }
