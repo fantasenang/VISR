@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { hasMetaMeasurementConsent } from "@/lib/privacy/consent";
 
 const DEFAULT_PIXEL_ID = "1558889889220021";
 const DEFAULT_GRAPH_API_VERSION = "v25.0";
@@ -36,9 +37,11 @@ type MetaApiResponse = {
   };
 };
 
+type ConsentOrderRow = { notes: string | null };
+
 export type MetaPurchaseResult =
   | { sent: true; eventsReceived: number; traceId: string | null; testEvent: boolean }
-  | { sent: false; reason: "not_configured" };
+  | { sent: false; reason: "not_configured" | "consent_not_granted" };
 
 function sha256(value: string) {
   return createHash("sha256").update(value).digest("hex");
@@ -95,9 +98,36 @@ function buildUserData(order: MetaPurchaseOrder) {
   };
 }
 
+async function hasStoredMeasurementConsent(orderId: string) {
+  const supabaseUrl = process.env.SUPABASE_URL?.replace(/\/$/, "");
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceRoleKey) return false;
+
+  try {
+    const response = await fetch(
+      `${supabaseUrl}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}&select=notes&limit=1`,
+      {
+        headers: {
+          apikey: serviceRoleKey,
+          Authorization: `Bearer ${serviceRoleKey}`,
+        },
+        cache: "no-store",
+      },
+    );
+    if (!response.ok) return false;
+    const rows = (await response.json()) as ConsentOrderRow[];
+    return hasMetaMeasurementConsent(rows[0]?.notes);
+  } catch {
+    return false;
+  }
+}
+
 export async function sendMetaPurchaseEvent(order: MetaPurchaseOrder): Promise<MetaPurchaseResult> {
   const accessToken = process.env.META_CONVERSIONS_API_ACCESS_TOKEN?.trim();
   if (!accessToken) return { sent: false, reason: "not_configured" };
+
+  const consentGranted = await hasStoredMeasurementConsent(order.id);
+  if (!consentGranted) return { sent: false, reason: "consent_not_granted" };
 
   const pixelId = process.env.META_PIXEL_ID?.trim() || DEFAULT_PIXEL_ID;
   const apiVersion = process.env.META_GRAPH_API_VERSION?.trim() || DEFAULT_GRAPH_API_VERSION;
