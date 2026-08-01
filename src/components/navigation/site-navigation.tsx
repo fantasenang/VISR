@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 const items = [
   { label: "Link", href: "#link-system" },
   { label: "Carry", href: "#carry" },
-  { label: "Halo", href: "#halo" },
+  { label: "Halo", href: "#halo-entry" },
 ] as const;
 
 export function SiteNavigation() {
