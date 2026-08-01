@@ -1,3 +1,7 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+
 const faqItems = [
   {
     question: "What is VISR Carry?",
@@ -66,50 +70,115 @@ const faqItems = [
   },
 ] as const;
 
-export function VisrFaq() {
-  return (
-    <section id="faq" className="border-t border-white/[0.07] py-24 md:py-36">
-      <div className="visr-container">
-        <div className="grid gap-14 md:grid-cols-12">
-          <div className="md:col-span-4">
-            <p className="visr-label text-white/40">Frequently Asked Questions</p>
-            <h2 className="mt-6 max-w-[8ch] text-[clamp(3rem,6vw,6.6rem)] font-normal leading-[0.92] tracking-[-0.055em]">
-              Before you carry it.
-            </h2>
-            <p className="mt-7 max-w-sm text-sm leading-7 text-white/42">
-              Product fit, preorder timing, payment, care, and support—collected in one place.
-            </p>
-          </div>
+const COLLAPSED_FOOTER_CLASS = "visr-footer-collapsed";
 
-          <div className="md:col-span-7 md:col-start-6">
-            {faqItems.map((item, index) => (
-              <details
-                key={item.question}
-                className="group border-t border-white/10 py-0 last:border-b"
-              >
-                <summary className="flex cursor-pointer list-none items-start justify-between gap-6 py-6 text-left [&::-webkit-details-marker]:hidden">
-                  <span className="flex gap-4">
-                    <span className="pt-1 text-[10px] tracking-[0.18em] text-white/25">
-                      {String(index + 1).padStart(2, "0")}
+export function VisrFaq() {
+  const [open, setOpen] = useState(false);
+  const sectionRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (window.location.hash === "#faq") setOpen(true);
+  }, []);
+
+  useEffect(() => {
+    const footer = sectionRef.current?.nextElementSibling;
+    if (!(footer instanceof HTMLElement) || footer.tagName !== "FOOTER") return;
+
+    footer.classList.toggle(COLLAPSED_FOOTER_CLASS, !open);
+    return () => footer.classList.remove(COLLAPSED_FOOTER_CLASS);
+  }, [open]);
+
+  return (
+    <section
+      id="faq"
+      ref={sectionRef}
+      className="border-t border-white/[0.07] bg-[#030303]"
+    >
+      <style>{`
+        footer.${COLLAPSED_FOOTER_CLASS} > .visr-container {
+          padding-top: 1.5rem;
+          padding-bottom: 1.5rem;
+        }
+
+        footer.${COLLAPSED_FOOTER_CLASS} > .visr-container > :first-child {
+          display: none;
+        }
+
+        footer.${COLLAPSED_FOOTER_CLASS} > .visr-container > :last-child {
+          padding-top: 0;
+        }
+      `}</style>
+
+      <div className="visr-container">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls="visr-faq-panel"
+          onClick={() => setOpen((current) => !current)}
+          className="flex w-full items-center justify-between gap-6 py-6 text-left"
+        >
+          <span>
+            <span className="visr-label block text-white/32">Support</span>
+            <span className="mt-2 block text-base text-white/78">
+              Frequently Asked Questions
+            </span>
+          </span>
+          <span className="flex items-center gap-3 text-[10px] uppercase tracking-[0.16em] text-white/35">
+            {open ? "Close" : "Open"}
+            <span
+              aria-hidden="true"
+              className={`text-xl font-light transition-transform duration-300 ${open ? "rotate-45" : ""}`}
+            >
+              +
+            </span>
+          </span>
+        </button>
+
+        {open ? (
+          <div
+            id="visr-faq-panel"
+            className="grid gap-14 border-t border-white/10 py-20 md:grid-cols-12 md:py-28"
+          >
+            <div className="md:col-span-4">
+              <p className="visr-label text-white/40">Frequently Asked Questions</p>
+              <h2 className="mt-6 max-w-[8ch] text-[clamp(3rem,6vw,6.6rem)] font-normal leading-[0.92] tracking-[-0.055em]">
+                Before you carry it.
+              </h2>
+              <p className="mt-7 max-w-sm text-sm leading-7 text-white/42">
+                Product fit, preorder timing, payment, care, and support—collected in one place.
+              </p>
+            </div>
+
+            <div className="md:col-span-7 md:col-start-6">
+              {faqItems.map((item, index) => (
+                <details
+                  key={item.question}
+                  className="group border-t border-white/10 py-0 last:border-b"
+                >
+                  <summary className="flex cursor-pointer list-none items-start justify-between gap-6 py-6 text-left [&::-webkit-details-marker]:hidden">
+                    <span className="flex gap-4">
+                      <span className="pt-1 text-[10px] tracking-[0.18em] text-white/25">
+                        {String(index + 1).padStart(2, "0")}
+                      </span>
+                      <span className="max-w-xl text-base leading-7 text-white/82">
+                        {item.question}
+                      </span>
                     </span>
-                    <span className="max-w-xl text-base leading-7 text-white/82">
-                      {item.question}
+                    <span
+                      aria-hidden="true"
+                      className="mt-1 text-xl font-light text-white/35 transition-transform duration-300 group-open:rotate-45"
+                    >
+                      +
                     </span>
-                  </span>
-                  <span
-                    aria-hidden="true"
-                    className="mt-1 text-xl font-light text-white/35 transition-transform duration-300 group-open:rotate-45"
-                  >
-                    +
-                  </span>
-                </summary>
-                <p className="max-w-2xl pb-7 pl-10 pr-10 text-sm leading-7 text-white/48">
-                  {item.answer}
-                </p>
-              </details>
-            ))}
+                  </summary>
+                  <p className="max-w-2xl pb-7 pl-10 pr-10 text-sm leading-7 text-white/48">
+                    {item.answer}
+                  </p>
+                </details>
+              ))}
+            </div>
           </div>
-        </div>
+        ) : null}
       </div>
     </section>
   );
