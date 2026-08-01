@@ -8,7 +8,7 @@ const items = [
   { label: "Halo", href: "#halo" },
 ] as const;
 
-export function SiteNavigation({ preorderPrice }: { preorderPrice: number }) {
+export function SiteNavigation({ preorderPrice = 179_000 }: { preorderPrice?: number }) {
   const previousScrollRef = useRef(0);
   const [revealed, setRevealed] = useState(false);
   const [direction, setDirection] = useState<"up" | "down">("up");
