@@ -3,7 +3,7 @@ import { PreorderCta } from "@/components/commerce/preorder-cta";
 import { PreorderSummary } from "@/components/commerce/preorder-summary";
 import { SiteNavigation } from "@/components/navigation/site-navigation";
 import { CarryPhase16 } from "@/experience/carry-phase-16/carry-phase-16";
-import { HaloCollection } from "@/experience/halo-collection-revised";
+import { DeferredHaloCollection } from "@/experience/deferred-halo-collection";
 import { LinkSystem } from "@/experience/link-system/link-system";
 import { OpeningSequence } from "@/experience/opening/opening-sequence";
 import { isPreorderPreviewOverride } from "@/lib/commerce/preorder-server";
@@ -44,7 +44,7 @@ export default function HomePage() {
       </section>
 
       <CarryPhase16 />
-      <HaloCollection />
+      <DeferredHaloCollection />
 
       <section id="preorder-details" className="border-t border-white/[0.07] py-24 md:py-36">
         <div className="visr-container">
