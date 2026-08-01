@@ -6,16 +6,19 @@ import { CarryPhase16 } from "@/experience/carry-phase-16/carry-phase-16";
 import { HaloCollection } from "@/experience/halo-collection-revised";
 import { LinkSystem } from "@/experience/link-system/link-system";
 import { OpeningSequence } from "@/experience/opening/opening-sequence";
+import { formatRupiah } from "@/lib/commerce/catalog";
+import { getLiveCatalog } from "@/lib/commerce/catalog-server";
 import { isPreorderPreviewOverride } from "@/lib/commerce/preorder-server";
 
-export default function HomePage() {
+export default async function HomePage() {
   const previewOpen = isPreorderPreviewOverride();
+  const catalog = await getLiveCatalog();
 
   return (
     <main>
-      <SiteNavigation />
+      <SiteNavigation preorderPrice={catalog.carry.price} />
       <OpeningSequence />
-      <PreorderSummary />
+      <PreorderSummary price={catalog.carry.price} readyPrice={catalog.carry.readyPrice} stock={catalog.carry.stock} />
       <LinkSystem />
 
       <section id="visr" className="py-28 md:py-48">
@@ -85,8 +88,8 @@ export default function HomePage() {
           <h2 className="mx-auto max-w-[11ch] text-[clamp(3rem,7vw,8rem)] font-normal leading-[0.94] tracking-[-0.055em]">Your collection deserves its moment.</h2>
           <div className="mx-auto mt-8 max-w-xl text-base leading-7 text-white/48">
             <p>VISR Carry Gen 2 — Batch 2 Preorder.</p>
-            <p><span className="text-white/75">Rp179.000 preorder</span> · Rp199.000 ready stock.</p>
-            <p>Website exclusive · 100 units available.</p>
+            <p><span className="text-white/75">{formatRupiah(catalog.carry.price)} preorder</span> · {formatRupiah(catalog.carry.readyPrice)} ready stock.</p>
+            <p>Website exclusive · {catalog.carry.stock} units currently available.</p>
           </div>
           <PreorderCta forceOpen={previewOpen} />
         </div>
