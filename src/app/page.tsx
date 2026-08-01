@@ -12,7 +12,7 @@ import { getLiveCatalog } from "@/lib/commerce/catalog-server";
 import { isPreorderPreviewOverride } from "@/lib/commerce/preorder-server";
 
 export default async function HomePage() {
-  const previewOpen = isPreorderPreviewOverride();
+  const previewOpen = await isPreorderPreviewOverride();
   const catalog = await getLiveCatalog();
 
   return (
@@ -20,7 +20,12 @@ export default async function HomePage() {
       <main>
         <SiteNavigation preorderPrice={catalog.carry.price} />
         <OpeningSequence />
-        <PreorderSummary price={catalog.carry.price} readyPrice={catalog.carry.readyPrice} stock={catalog.carry.stock} />
+        <PreorderSummary
+          price={catalog.carry.price}
+          readyPrice={catalog.carry.readyPrice}
+          stock={catalog.carry.stock}
+          forceOpen={previewOpen}
+        />
         <LinkSystem />
 
         <section id="visr" className="py-28 md:py-48">
