@@ -13,7 +13,16 @@ export async function GET() {
   }
 
   try {
-    await releaseExpiredVisrReservations();
+    try {
+      await releaseExpiredVisrReservations();
+    } catch (cleanupError) {
+      console.warn(JSON.stringify({
+        event: "ADMIN_RESERVATION_CLEANUP_SKIPPED",
+        message: cleanupError instanceof Error ? cleanupError.message : "UNKNOWN_ERROR",
+        timestamp: new Date().toISOString(),
+      }));
+    }
+
     const data = await getAdminDashboardData();
     return NextResponse.json(data, { headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch (error) {
