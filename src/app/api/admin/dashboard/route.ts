@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/admin/auth";
 import { getAdminDashboardData } from "@/lib/admin/data";
+import { releaseExpiredVisrReservations } from "@/lib/commerce/reservations";
 
 export async function GET() {
   const session = await getAdminSession();
@@ -12,6 +13,7 @@ export async function GET() {
   }
 
   try {
+    await releaseExpiredVisrReservations();
     const data = await getAdminDashboardData();
     return NextResponse.json(data, { headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch (error) {
