@@ -28,7 +28,7 @@ export default function PreorderGate({ children, forceOpen = false }: { children
   return (
     <main className="flex min-h-screen items-center bg-[#050505] px-6 py-16 text-white">
       <div className="mx-auto w-full max-w-3xl rounded-[2rem] border border-white/10 bg-white/[0.025] p-8 md:p-14">
-        <p className="visr-label text-white/40">VISR Carry Gen 2 / Batch 2</p>
+        <p className="visr-label text-white/40">VISR Carry / Batch 2</p>
         <h1 className="mt-5 text-4xl tracking-[-0.045em] md:text-6xl">
           {phase === "upcoming" ? "Preorder has not opened yet." : "Batch 2 preorder is closed."}
         </h1>
