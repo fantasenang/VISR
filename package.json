@@ -7,12 +7,13 @@
   },
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "npm run security:check && npm run observability:check && next build",
+    "build": "npm run purge:prelaunch-trials && npm run security:check && npm run observability:check && next build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "security:check": "node scripts/security-regression.mjs",
     "observability:check": "node scripts/observability-regression.mjs",
+    "purge:prelaunch-trials": "node scripts/purge-prelaunch-trial-orders.mjs",
     "diagnostics": "node scripts/startup-diagnostics.mjs",
     "smoke:production": "node scripts/production-smoke.mjs",
     "check:go-live": "node scripts/go-live-readiness.mjs"
