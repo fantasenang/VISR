@@ -68,7 +68,16 @@ type DashboardData = {
 
 type ApiError = { error?: { message?: string } };
 type Tab = "overview" | "orders" | "products";
-type OrderFilter = "active" | "all" | "pending" | "paid" | "production" | "packing" | "shipped" | "delivered" | "expired";
+type OrderFilter =
+  | "active"
+  | "all"
+  | "pending"
+  | "paid"
+  | "production"
+  | "packing"
+  | "shipped"
+  | "delivered"
+  | "expired";
 
 const fulfillmentStatuses = ["pending", "confirmed", "production", "qc", "packing", "shipped", "delivered"];
 const archivedPaymentStatuses = new Set(["expired", "failed", "refunded"]);
@@ -114,6 +123,8 @@ const inputClass =
   "w-full rounded-xl border border-white/10 bg-white/[0.035] px-4 py-3 text-sm text-white outline-none transition focus:border-white/30";
 const buttonClass =
   "rounded-full border border-white/15 px-5 py-3 text-sm transition hover:bg-white hover:text-black disabled:cursor-not-allowed disabled:opacity-40";
+const dangerButtonClass =
+  "rounded-full border border-red-400/25 px-5 py-3 text-sm text-red-200 transition hover:bg-red-400/10 disabled:cursor-not-allowed disabled:opacity-40";
 
 function AuthShell({ children }: { children: React.ReactNode }) {
   return (
@@ -179,12 +190,31 @@ function LoginScreen({ username, onComplete }: { username: string; onComplete: (
   );
 }
 
+function cancellationCopy(order: AdminOrder) {
+  if (order.paymentStatus === "pending") {
+    return {
+      title: "Cancel order",
+      detail: "Order akan dipindahkan ke arsip Expired dan seluruh reserved stock dikembalikan.",
+    };
+  }
+
+  const stockHeld = ["shipped", "delivered"].includes(order.fulfillmentStatus);
+  return {
+    title: "Cancel & mark refunded",
+    detail: stockHeld
+      ? "Order PAID akan ditandai Refunded. Dashboard tidak mengirim uang ke customer dan stok tidak dikembalikan otomatis karena barang sudah dikirim/diterima. Proses refund serta retur secara manual terlebih dahulu."
+      : "Order PAID akan ditandai Refunded dan stok sold dikembalikan. Dashboard tidak mengirim uang ke customer. Proses refund di Midtrans terlebih dahulu sebelum melanjutkan.",
+  };
+}
+
 function OrderEditor({ order, onSaved }: { order: AdminOrder; onSaved: () => Promise<void> }) {
   const [status, setStatus] = useState(order.fulfillmentStatus);
   const [tracking, setTracking] = useState(order.shipment?.trackingNumber ?? "");
   const [busyAction, setBusyAction] = useState<"save" | "cancel" | null>(null);
   const [message, setMessage] = useState("");
   const archived = archivedPaymentStatuses.has(order.paymentStatus);
+  const cancellable = ["pending", "paid"].includes(order.paymentStatus);
+  const cancelCopy = cancellationCopy(order);
 
   async function save() {
     setBusyAction("save");
@@ -207,10 +237,8 @@ function OrderEditor({ order, onSaved }: { order: AdminOrder; onSaved: () => Pro
     }
   }
 
-  async function cancelPending() {
-    const confirmed = window.confirm(
-      `Cancel ${order.orderNumber}?\n\nOrder akan dipindahkan ke arsip Expired dan seluruh reserved stock akan dikembalikan.`,
-    );
+  async function cancelOrder() {
+    const confirmed = window.confirm(`${cancelCopy.title}: ${order.orderNumber}?\n\n${cancelCopy.detail}`);
     if (!confirmed) return;
 
     setBusyAction("cancel");
@@ -226,7 +254,11 @@ function OrderEditor({ order, onSaved }: { order: AdminOrder; onSaved: () => Pro
   }
 
   return (
-    <article className={`rounded-2xl border p-5 ${archived ? "border-white/[0.06] bg-white/[0.012] opacity-65" : "border-white/10 bg-white/[0.025]"}`}>
+    <article
+      className={`rounded-2xl border p-5 ${
+        archived ? "border-white/[0.06] bg-white/[0.012] opacity-65" : "border-white/10 bg-white/[0.025]"
+      }`}
+    >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="font-mono text-xs text-white/45">{order.orderNumber}</p>
@@ -245,7 +277,9 @@ function OrderEditor({ order, onSaved }: { order: AdminOrder; onSaved: () => Pro
       <div className="mt-5 grid gap-5 border-t border-white/8 pt-5 md:grid-cols-2">
         <div className="space-y-2 text-sm text-white/58">
           <p>{order.items.map((item) => `${item.quantity}× ${item.variantName ?? item.name}`).join(" · ") || "No item detail"}</p>
-          <p>{order.address}, {order.city}, {order.province} {order.postalCode}</p>
+          <p>
+            {order.address}, {order.city}, {order.province} {order.postalCode}
+          </p>
           <a
             className="block w-fit text-white/80 underline decoration-white/20 underline-offset-4"
             href={`https://wa.me/${order.whatsapp.replace(/\D/g, "")}`}
@@ -261,7 +295,9 @@ function OrderEditor({ order, onSaved }: { order: AdminOrder; onSaved: () => Pro
             <Field label="Fulfillment">
               <select className={inputClass} value={status} onChange={(event) => setStatus(event.target.value)}>
                 {fulfillmentStatuses.map((value) => (
-                  <option key={value} value={value} className="bg-black">{value}</option>
+                  <option key={value} value={value} className="bg-black">
+                    {value}
+                  </option>
                 ))}
               </select>
             </Field>
@@ -271,20 +307,23 @@ function OrderEditor({ order, onSaved }: { order: AdminOrder; onSaved: () => Pro
             <button className={`${buttonClass} sm:col-span-2`} onClick={save} disabled={busyAction !== null}>
               {busyAction === "save" ? "Saving…" : "Save order"}
             </button>
-            {order.paymentStatus === "pending" ? (
-              <button
-                className="rounded-full border border-red-400/25 px-5 py-3 text-sm text-red-200 transition hover:bg-red-400/10 disabled:cursor-not-allowed disabled:opacity-40 sm:col-span-2"
-                onClick={cancelPending}
-                disabled={busyAction !== null}
-              >
-                {busyAction === "cancel" ? "Cancelling…" : "Cancel pending order"}
+            {cancellable ? (
+              <button className={`${dangerButtonClass} sm:col-span-2`} onClick={cancelOrder} disabled={busyAction !== null}>
+                {busyAction === "cancel" ? "Cancelling…" : cancelCopy.title}
               </button>
+            ) : null}
+            {order.paymentStatus === "paid" ? (
+              <p className="text-xs leading-5 text-amber-100/55 sm:col-span-2">
+                Paid cancellation records the order as refunded internally. It does not call the Midtrans refund API.
+              </p>
             ) : null}
             {message ? <p className="text-xs text-white/45 sm:col-span-2">{message}</p> : null}
           </div>
         ) : (
           <div className="rounded-xl border border-white/[0.07] p-4 text-sm text-white/42">
-            Archived order. Stock reservation is no longer active.
+            {order.paymentStatus === "refunded"
+              ? "Cancelled and archived as refunded."
+              : "Archived order. Stock reservation is no longer active."}
           </div>
         )}
       </div>
@@ -337,17 +376,34 @@ function ProductEditor({ product, onSaved }: { product: AdminProduct; onSaved: (
       </div>
       <div className="mt-5 grid gap-4 border-t border-white/8 pt-5 sm:grid-cols-3">
         <Field label="Price IDR">
-          <input className={inputClass} inputMode="numeric" value={price} onChange={(event) => setPrice(event.target.value.replace(/\D/g, ""))} />
+          <input
+            className={inputClass}
+            inputMode="numeric"
+            value={price}
+            onChange={(event) => setPrice(event.target.value.replace(/\D/g, ""))}
+          />
         </Field>
         <Field label="Total stock">
-          <input className={inputClass} inputMode="numeric" value={stock} onChange={(event) => setStock(event.target.value.replace(/\D/g, ""))} />
+          <input
+            className={inputClass}
+            inputMode="numeric"
+            value={stock}
+            onChange={(event) => setStock(event.target.value.replace(/\D/g, ""))}
+          />
         </Field>
         <Field label="Max / order">
-          <input className={inputClass} inputMode="numeric" value={maxPerOrder} onChange={(event) => setMaxPerOrder(event.target.value.replace(/\D/g, ""))} />
+          <input
+            className={inputClass}
+            inputMode="numeric"
+            value={maxPerOrder}
+            onChange={(event) => setMaxPerOrder(event.target.value.replace(/\D/g, ""))}
+          />
         </Field>
       </div>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-4 text-xs text-white/42">
-        <span>Reserved {product.stockReserved} · Sold {product.stockSold}</span>
+        <span>
+          Reserved {product.stockReserved} · Sold {product.stockSold}
+        </span>
         <label className="flex items-center gap-2">
           <input type="checkbox" checked={active} onChange={(event) => setActive(event.target.checked)} /> Active
         </label>
@@ -360,7 +416,15 @@ function ProductEditor({ product, onSaved }: { product: AdminProduct; onSaved: (
   );
 }
 
-function Dashboard({ data, refresh, logout }: { data: DashboardData; refresh: () => Promise<void>; logout: () => Promise<void> }) {
+function Dashboard({
+  data,
+  refresh,
+  logout,
+}: {
+  data: DashboardData;
+  refresh: () => Promise<void>;
+  logout: () => Promise<void>;
+}) {
   const [tab, setTab] = useState<Tab>("overview");
   const [filter, setFilter] = useState<OrderFilter>("active");
   const archivedCount = data.orders.filter((order) => archivedPaymentStatuses.has(order.paymentStatus)).length;
@@ -390,8 +454,12 @@ function Dashboard({ data, refresh, logout }: { data: DashboardData; refresh: ()
             <h1 className="mt-2 text-3xl tracking-[-0.045em]">Control</h1>
           </div>
           <div className="flex gap-3">
-            <button className={buttonClass} onClick={refresh}>Refresh</button>
-            <button className={buttonClass} onClick={logout}>Logout</button>
+            <button className={buttonClass} onClick={refresh}>
+              Refresh
+            </button>
+            <button className={buttonClass} onClick={logout}>
+              Logout
+            </button>
           </div>
         </header>
 
@@ -400,7 +468,9 @@ function Dashboard({ data, refresh, logout }: { data: DashboardData; refresh: ()
             <button
               key={value}
               onClick={() => setTab(value)}
-              className={`rounded-full px-5 py-2.5 text-sm capitalize ${tab === value ? "bg-white text-black" : "border border-white/10 text-white/55"}`}
+              className={`rounded-full px-5 py-2.5 text-sm capitalize ${
+                tab === value ? "bg-white text-black" : "border border-white/10 text-white/55"
+              }`}
             >
               {value}
             </button>
@@ -430,8 +500,9 @@ function Dashboard({ data, refresh, logout }: { data: DashboardData; refresh: ()
             <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
               <div>
                 <h2 className="text-2xl">Orders</h2>
-                <p className="mt-2 max-w-xl text-sm leading-6 text-white/42">
-                  Pending reservations expire automatically after their payment deadline. Cancel pending order releases its stock immediately.
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-white/42">
+                  Pending cancellation releases reserved stock. Paid cancellation marks the order refunded; stock returns
+                  only before shipment, and the actual Midtrans refund remains manual.
                 </p>
               </div>
               <select
@@ -439,20 +510,42 @@ function Dashboard({ data, refresh, logout }: { data: DashboardData; refresh: ()
                 value={filter}
                 onChange={(event) => setFilter(event.target.value as OrderFilter)}
               >
-                <option className="bg-black" value="active">Active orders</option>
-                <option className="bg-black" value="pending">Pending payment</option>
-                <option className="bg-black" value="paid">Paid</option>
-                <option className="bg-black" value="production">Production</option>
-                <option className="bg-black" value="packing">Packing</option>
-                <option className="bg-black" value="shipped">Shipped</option>
-                <option className="bg-black" value="delivered">Delivered</option>
-                <option className="bg-black" value="expired">Expired / cancelled</option>
-                <option className="bg-black" value="all">All including archive</option>
+                <option className="bg-black" value="active">
+                  Active orders
+                </option>
+                <option className="bg-black" value="pending">
+                  Pending payment
+                </option>
+                <option className="bg-black" value="paid">
+                  Paid
+                </option>
+                <option className="bg-black" value="production">
+                  Production
+                </option>
+                <option className="bg-black" value="packing">
+                  Packing
+                </option>
+                <option className="bg-black" value="shipped">
+                  Shipped
+                </option>
+                <option className="bg-black" value="delivered">
+                  Delivered
+                </option>
+                <option className="bg-black" value="expired">
+                  Expired / cancelled
+                </option>
+                <option className="bg-black" value="all">
+                  All including archive
+                </option>
               </select>
             </div>
             <div className="space-y-4">
-              {filteredOrders.map((order) => <OrderEditor key={order.id} order={order} onSaved={refresh} />)}
-              {filteredOrders.length === 0 ? <p className="py-16 text-center text-white/35">No orders in this filter.</p> : null}
+              {filteredOrders.map((order) => (
+                <OrderEditor key={order.id} order={order} onSaved={refresh} />
+              ))}
+              {filteredOrders.length === 0 ? (
+                <p className="py-16 text-center text-white/35">No orders in this filter.</p>
+              ) : null}
             </div>
           </section>
         ) : null}
@@ -461,10 +554,14 @@ function Dashboard({ data, refresh, logout }: { data: DashboardData; refresh: ()
           <section className="mt-7">
             <div className="mb-5">
               <h2 className="text-2xl">Products & stock</h2>
-              <p className="mt-2 text-sm text-white/42">Reserved and sold values follow transactions and cannot be edited manually.</p>
+              <p className="mt-2 text-sm text-white/42">
+                Reserved and sold values follow transactions and cannot be edited manually.
+              </p>
             </div>
             <div className="grid gap-4 lg:grid-cols-2">
-              {data.products.map((product) => <ProductEditor key={product.id} product={product} onSaved={refresh} />)}
+              {data.products.map((product) => (
+                <ProductEditor key={product.id} product={product} onSaved={refresh} />
+              ))}
             </div>
           </section>
         ) : null}
@@ -509,14 +606,38 @@ export default function ControlClient() {
       <AuthShell>
         <h1 className="text-3xl">VISR Control unavailable.</h1>
         <p className="mt-4 text-sm text-white/48">{error}</p>
-        <button className={`${buttonClass} mt-7`} onClick={() => void loadStatus()}>Try again</button>
+        <button className={`${buttonClass} mt-7`} onClick={() => void loadStatus()}>
+          Try again
+        </button>
       </AuthShell>
     );
   }
 
-  if (!status) return <AuthShell><p className="animate-pulse text-sm text-white/40">Opening VISR Control…</p></AuthShell>;
-  if (!status.configured) return <AuthShell><p className="text-sm text-white/45">Reload this page to continue owner activation.</p></AuthShell>;
+  if (!status) {
+    return (
+      <AuthShell>
+        <p className="animate-pulse text-sm text-white/40">Opening VISR Control…</p>
+      </AuthShell>
+    );
+  }
+
+  if (!status.configured) {
+    return (
+      <AuthShell>
+        <p className="text-sm text-white/45">Reload this page to continue owner activation.</p>
+      </AuthShell>
+    );
+  }
+
   if (!status.authenticated) return <LoginScreen username={status.owner.username} onComplete={loadStatus} />;
-  if (!data) return <AuthShell><p className="animate-pulse text-sm text-white/40">Loading operations…</p></AuthShell>;
+
+  if (!data) {
+    return (
+      <AuthShell>
+        <p className="animate-pulse text-sm text-white/40">Loading operations…</p>
+      </AuthShell>
+    );
+  }
+
   return <Dashboard data={data} refresh={loadDashboard} logout={logout} />;
 }
