@@ -2,22 +2,8 @@
   position: relative;
   isolation: isolate;
   overflow: clip;
-  border-top: 1px solid rgb(255 255 255 / 7%);
   background: #020202;
   color: #f7f7f5;
-}
-
-.section::before {
-  position: absolute;
-  inset: 0 0 auto;
-  z-index: -1;
-  height: 38rem;
-  content: "";
-  pointer-events: none;
-  background:
-    radial-gradient(circle at 50% 15%, var(--halo-aura, rgb(255 255 255 / 8%)), transparent 58%),
-    linear-gradient(180deg, rgb(255 255 255 / 2.5%), transparent 68%);
-  transition: background 420ms ease;
 }
 
 .introduction,
@@ -29,7 +15,10 @@
 
 .introduction {
   padding-top: 6rem;
-  padding-bottom: 2rem;
+  padding-bottom: 4rem;
+  background:
+    radial-gradient(circle at 50% 15%, rgb(255 255 255 / 5%), transparent 58%),
+    #020202;
 }
 
 .header {
@@ -41,7 +30,9 @@
 
 .eyebrow,
 .counter,
-.activeIndex {
+.activeIndex,
+.topline,
+.progress p {
   margin: 0;
   font-size: 0.625rem;
   font-weight: 500;
@@ -78,111 +69,149 @@
 
 .story {
   position: relative;
-  height: 430svh;
+  height: 500svh;
 }
 
 .sticky {
   position: sticky;
   top: 0;
   z-index: 2;
-  display: flex;
   height: 100svh;
-  align-items: center;
 }
 
-.stickyInner {
-  width: min(100%, 430px);
-  margin-inline: auto;
-  padding: 4.75rem 1.25rem 1.25rem;
-}
-
-.stage {
-  display: grid;
-  height: min(72svh, 650px);
-  grid-template-rows: minmax(0, 1fr) auto;
-  overflow: hidden;
-  border: 1px solid rgb(255 255 255 / 10%);
-  background: #050505;
-  box-shadow: 0 2rem 5rem rgb(0 0 0 / 48%);
-}
-
-.media {
+.canvas {
   position: relative;
-  min-height: 0;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 50% 42%, var(--halo-aura, transparent), transparent 68%),
-    #060606;
-  transition: background 420ms ease;
+  background: #030303;
 }
 
-.image {
+.auraLayer {
+  position: absolute;
+  inset: -15%;
+  z-index: 0;
+  opacity: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 42%, var(--halo-aura), transparent 56%),
+    radial-gradient(circle at 50% 100%, var(--halo-aura), transparent 52%);
+  transition: opacity 620ms ease;
+}
+
+.auraLayer[data-active="true"] {
+  opacity: 1;
+}
+
+.imageStack {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+}
+
+.imageLayer {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  animation: halo-image-in 360ms ease both;
+  object-position: 50% 50%;
+  opacity: 0;
+  transition: opacity 560ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.media::after {
+.imageLayer[data-active="true"] {
+  opacity: 1;
+}
+
+.imageTreatment {
   position: absolute;
   inset: 0;
-  content: "";
+  z-index: 2;
   pointer-events: none;
   background:
-    linear-gradient(180deg, rgb(0 0 0 / 6%) 42%, rgb(0 0 0 / 82%) 100%),
-    radial-gradient(circle at 50% 45%, transparent 35%, rgb(0 0 0 / 22%) 100%);
+    linear-gradient(180deg, rgb(0 0 0 / 46%) 0%, transparent 24%, transparent 48%, rgb(0 0 0 / 28%) 68%, rgb(0 0 0 / 92%) 100%),
+    radial-gradient(circle at 50% 44%, transparent 30%, rgb(0 0 0 / 16%) 76%, rgb(0 0 0 / 38%) 100%);
 }
 
-.visualLabel {
+.topline {
   position: absolute;
-  right: 1.1rem;
-  bottom: 1.15rem;
-  left: 1.1rem;
-  z-index: 2;
-  animation: halo-copy-in 360ms ease both;
+  top: max(4.9rem, calc(env(safe-area-inset-top) + 4rem));
+  right: 1.25rem;
+  left: 1.25rem;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: rgb(247 247 245 / 52%);
+  font-variant-numeric: tabular-nums;
+}
+
+.copyStack {
+  position: absolute;
+  right: 1.25rem;
+  bottom: calc(env(safe-area-inset-bottom) + 6.4rem);
+  left: 1.25rem;
+  z-index: 4;
+  min-height: 14rem;
+}
+
+.copyLayer {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(0.5rem);
+  transition:
+    opacity 420ms ease,
+    transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.copyLayer[data-active="true"] {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .activeIndex {
-  color: rgb(247 247 245 / 42%);
+  color: rgb(247 247 245 / 44%);
+  font-variant-numeric: tabular-nums;
 }
 
 .name {
   max-width: 8ch;
-  margin: 0.65rem 0 0;
-  font-size: clamp(2.55rem, 12vw, 3.7rem);
+  margin: 0.7rem 0 0;
+  font-size: clamp(3.25rem, 15vw, 4.8rem);
   font-weight: 400;
-  line-height: 0.92;
-  letter-spacing: -0.06em;
+  line-height: 0.88;
+  letter-spacing: -0.065em;
 }
 
 .line {
-  margin: 0.7rem 0 0;
-  color: rgb(247 247 245 / 68%);
-  font-size: 0.75rem;
-  letter-spacing: 0.06em;
+  margin: 0.85rem 0 0;
+  color: rgb(247 247 245 / 72%);
+  font-size: 0.7rem;
+  letter-spacing: 0.11em;
   text-transform: uppercase;
 }
 
-.detail {
-  display: flex;
-  min-height: 6.5rem;
-  align-items: center;
-  padding: 1.35rem 1.1rem 1.5rem;
-  border-top: 1px solid rgb(255 255 255 / 8%);
-  animation: halo-copy-in 360ms ease both;
-}
-
 .description {
-  max-width: 30rem;
-  margin: 0;
-  color: rgb(247 247 245 / 52%);
+  max-width: 31rem;
+  margin: 1.15rem 0 0;
+  color: rgb(247 247 245 / 58%);
   font-size: 0.82rem;
   line-height: 1.65;
 }
 
 .progress {
-  margin-top: 1rem;
+  position: absolute;
+  right: 1.25rem;
+  bottom: calc(env(safe-area-inset-bottom) + 1.2rem);
+  left: 1.25rem;
+  z-index: 4;
 }
 
 .progressTrack {
@@ -193,11 +222,11 @@
 
 .progressSegment {
   height: 1px;
-  background: rgb(247 247 245 / 14%);
+  background: rgb(247 247 245 / 18%);
   transition:
-    height 240ms ease,
-    background-color 240ms ease,
-    box-shadow 240ms ease;
+    height 280ms ease,
+    background-color 360ms ease,
+    box-shadow 360ms ease;
 }
 
 .progressSegment[data-active="true"] {
@@ -207,11 +236,8 @@
 }
 
 .progress p {
-  margin: 0.75rem 0 0;
-  color: rgb(247 247 245 / 28%);
-  font-size: 0.625rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  margin-top: 0.7rem;
+  color: rgb(247 247 245 / 36%);
 }
 
 .steps {
@@ -230,9 +256,8 @@
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
-  padding-top: 2.5rem;
+  padding-top: 4rem;
   padding-bottom: 5rem;
-  border-top: 1px solid rgb(255 255 255 / 9%);
 }
 
 .availability {
@@ -259,51 +284,20 @@
   font-size: 1rem;
 }
 
-@keyframes halo-image-in {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes halo-copy-in {
-  from {
-    opacity: 0;
-    transform: translateY(0.35rem);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 @supports not (height: 100svh) {
   .story {
-    height: 430vh;
+    height: 500vh;
   }
 
   .sticky {
     height: 100vh;
   }
-
-  .stage {
-    height: min(72vh, 650px);
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .image,
-  .visualLabel,
-  .detail {
-    animation: none;
-  }
-
-  .section::before,
-  .media,
+  .auraLayer,
+  .imageLayer,
+  .copyLayer,
   .progressSegment {
     transition: none;
   }
