@@ -23,7 +23,7 @@ export function PreorderSummary({ price, readyPrice, stock, forceOpen = false }:
               <p className="pb-1 text-sm leading-5 text-white/38">preorder<br />{formatRupiah(readyPrice)} ready stock</p>
             </div>
             <p className="mt-6 max-w-md text-sm leading-6 text-white/52">
-              Includes one VISR Carry and two VISR Link. {stock} units currently available for Batch 2.
+              Includes 1× VISR Carry, 1× VISR Link, and 1× strap. {stock} units currently available for Batch 2.
             </p>
             <div className="text-left [&>a]:mt-8 [&>p]:mx-0 [&>div]:mx-0">
               <PreorderCta forceOpen={forceOpen} />
