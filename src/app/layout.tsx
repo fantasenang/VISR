@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
-import { Analytics } from "@vercel/analytics/next";
-import { SpeedInsights } from "@vercel/speed-insights/next";
 import { PaymentReturnGateway } from "@/components/commerce/payment-return-gateway";
 import { ProductNameNormalizer } from "@/components/brand/product-name-normalizer";
+import { ConsentAnalytics } from "@/components/privacy/consent-analytics";
+import { PrivacyConsent } from "@/components/privacy/privacy-consent";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -43,11 +43,11 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body className="visr-grain antialiased">
         {children}
         <ProductNameNormalizer />
+        <PrivacyConsent />
         <Suspense fallback={null}>
           <PaymentReturnGateway />
         </Suspense>
-        <Analytics />
-        <SpeedInsights />
+        <ConsentAnalytics />
       </body>
     </html>
   );
