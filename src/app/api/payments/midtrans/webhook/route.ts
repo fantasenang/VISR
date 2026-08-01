@@ -139,6 +139,22 @@ export async function POST(request: Request) {
     return apiError(requestId, "AMOUNT_MISMATCH", "The notified amount does not match the order total.", 409);
   }
 
+  if (order.payment_status === "refunded") {
+    logger.info("MIDTRANS_WEBHOOK_IGNORED_REFUNDED_ORDER", {
+      requestId,
+      orderId: order.id,
+      orderNumber: order.order_number,
+      providerStatus: payload.transaction_status,
+      transactionId: payload.transaction_id ?? null,
+      orderLookupDurationMs,
+      durationMs: elapsedMs(startedAt),
+    });
+    return NextResponse.json(
+      { received: true, ignored: true, requestId },
+      { headers: { "x-request-id": requestId, "Cache-Control": "no-store, max-age=0" } },
+    );
+  }
+
   let transactionStatus = payload.transaction_status;
   let fraudStatus = payload.fraud_status;
   let transactionId = payload.transaction_id ?? null;
