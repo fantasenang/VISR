@@ -1,3 +1,4 @@
+import { MobileOnlyPage } from "@/components/layout/mobile-only-page";
 import { OrderLookupClient } from "./order-lookup-client";
 
 export const metadata = {
@@ -6,5 +7,9 @@ export const metadata = {
 };
 
 export default function OrderPage() {
-  return <OrderLookupClient />;
+  return (
+    <MobileOnlyPage>
+      <OrderLookupClient />
+    </MobileOnlyPage>
+  );
 }
