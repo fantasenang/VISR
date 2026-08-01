@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ADMIN_EMAIL, ADMIN_USERNAME, getAdminSession, isOwnerConfigured } from "@/lib/admin/auth";
+import { ADMIN_USERNAME, getAdminSession, isOwnerConfigured } from "@/lib/admin/auth";
 
 export async function GET() {
   try {
@@ -8,14 +8,14 @@ export async function GET() {
       {
         configured,
         authenticated: Boolean(session),
-        owner: { username: ADMIN_USERNAME, recoveryEmail: ADMIN_EMAIL },
+        owner: { username: ADMIN_USERNAME },
       },
-      { headers: { "Cache-Control": "no-store, max-age=0" } },
+      { headers: { "Cache-Control": "no-store, max-age=0", "X-Robots-Tag": "noindex" } },
     );
   } catch {
     return NextResponse.json(
       { error: { code: "ADMIN_AUTH_UNAVAILABLE", message: "VISR Control authentication is unavailable." } },
-      { status: 503, headers: { "Cache-Control": "no-store, max-age=0" } },
+      { status: 503, headers: { "Cache-Control": "no-store, max-age=0", "X-Robots-Tag": "noindex" } },
     );
   }
 }
