@@ -8,46 +8,51 @@ const halos = [
     slug: "crimson",
     name: "Crimson Halo",
     line: "Bold Edge",
-    description: "A deep red edge treatment that becomes more pronounced when external light enters the visor.",
+    description: "A deep red edge visor that becomes more pronounced when external light enters the visor.",
     accent: "#b91f2e",
     glow: "rgb(220 38 56 / 62%)",
     aura: "rgb(185 31 46 / 28%)",
+    imageScale: 1,
   },
   {
     slug: "ice",
     name: "Ice Halo",
     line: "Clear Edge",
-    description: "A pale, cool edge treatment that gives the visor a restrained luminous outline under direct light.",
+    description: "A pale, cool edge visor that gives the visor a restrained luminous outline under direct light.",
     accent: "#d8eff5",
     glow: "rgb(216 239 245 / 62%)",
     aura: "rgb(190 229 239 / 24%)",
+    imageScale: 0.9,
   },
   {
     slug: "emerald",
     name: "Emerald Halo",
     line: "Deep Edge",
-    description: "A composed green edge treatment that reveals more depth as light travels through the visor material.",
+    description: "A composed green edge visor that reveals more depth as light travels through the visor material.",
     accent: "#187a55",
     glow: "rgb(24 122 85 / 68%)",
     aura: "rgb(24 122 85 / 27%)",
+    imageScale: 1,
   },
   {
     slug: "amber",
     name: "Amber Halo",
     line: "Warm Edge",
-    description: "A warm amber edge treatment that becomes visually brighter when the visor is struck by light.",
+    description: "A warm amber edge visor that becomes visually brighter when the visor is struck by light.",
     accent: "#d48722",
     glow: "rgb(212 135 34 / 66%)",
     aura: "rgb(212 135 34 / 27%)",
+    imageScale: 1,
   },
   {
     slug: "pink",
     name: "Pink Halo",
     line: "Soft Edge",
-    description: "A soft pink edge treatment that creates a controlled glowing impression without an internal light source.",
+    description: "A soft pink edge visor that creates a controlled glowing impression without an internal light source.",
     accent: "#e58cac",
     glow: "rgb(229 140 172 / 65%)",
     aura: "rgb(229 140 172 / 27%)",
+    imageScale: 0.88,
   },
 ] as const;
 
@@ -119,20 +124,28 @@ export function HaloCollection() {
             })}
 
             <div className={styles.imageStack}>
-              {halos.map((halo, index) => (
-                <img
-                  key={halo.slug}
-                  src={`/images/halo/halo-${halo.slug}.webp`}
-                  alt={activeIndex === index ? `${halo.name} colored-edge visor installed on VISR Carry` : ""}
-                  width={447}
-                  height={558}
-                  loading="lazy"
-                  decoding="async"
-                  className={styles.imageLayer}
-                  data-active={activeIndex === index}
-                  aria-hidden={activeIndex !== index}
-                />
-              ))}
+              {halos.map((halo, index) => {
+                const imageStyle = {
+                  transform: `scale(${halo.imageScale})`,
+                  transformOrigin: "50% 42%",
+                } as CSSProperties;
+
+                return (
+                  <img
+                    key={halo.slug}
+                    src={`/images/halo/halo-${halo.slug}.webp`}
+                    alt={activeIndex === index ? `${halo.name} colored-edge visor installed on VISR Carry` : ""}
+                    width={447}
+                    height={558}
+                    loading="lazy"
+                    decoding="async"
+                    className={styles.imageLayer}
+                    style={imageStyle}
+                    data-active={activeIndex === index}
+                    aria-hidden={activeIndex !== index}
+                  />
+                );
+              })}
             </div>
 
             <div className={styles.imageTreatment} aria-hidden="true" />
