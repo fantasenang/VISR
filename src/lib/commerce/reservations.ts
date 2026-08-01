@@ -4,6 +4,18 @@ type OrderStatusRow = {
   payment_status: string;
 };
 
+type ActiveReservationRow = {
+  product_id: string;
+  quantity: number;
+};
+
+type ProductStockRow = {
+  id: string;
+  stock_total: number;
+  stock_reserved: number;
+  stock_sold: number;
+};
+
 function getConfig() {
   const url = process.env.SUPABASE_URL?.replace(/\/$/, "");
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -35,17 +47,100 @@ async function readOrder(orderId: string) {
   return rows[0] ?? null;
 }
 
-export async function releaseExpiredVisrReservations() {
-  const { url, serviceRoleKey } = getConfig();
-  const response = await fetch(`${url}/rest/v1/rpc/release_expired_visr_reservations`, {
+async function callReleaseExpiredReservations(url: string, serviceRoleKey: string) {
+  return fetch(`${url}/rest/v1/rpc/release_expired_visr_reservations`, {
     method: "POST",
     headers: requestHeaders(serviceRoleKey),
     body: "{}",
     cache: "no-store",
   });
+}
+
+async function repairUnderstatedReservedStock(url: string, serviceRoleKey: string) {
+  const reservationsResponse = await fetch(
+    `${url}/rest/v1/inventory_reservations?select=product_id,quantity&status=eq.active`,
+    {
+      headers: requestHeaders(serviceRoleKey),
+      cache: "no-store",
+    },
+  );
+
+  if (!reservationsResponse.ok) throw new Error("RESERVATION_REPAIR_READ_FAILED");
+  const reservations = (await reservationsResponse.json()) as ActiveReservationRow[];
+
+  const expectedByProduct = new Map<string, number>();
+  for (const reservation of reservations) {
+    const quantity = Number(reservation.quantity);
+    if (!reservation.product_id || !Number.isFinite(quantity) || quantity <= 0) continue;
+    expectedByProduct.set(reservation.product_id, (expectedByProduct.get(reservation.product_id) ?? 0) + quantity);
+  }
+
+  if (expectedByProduct.size === 0) return 0;
+
+  const productsResponse = await fetch(
+    `${url}/rest/v1/products?select=id,stock_total,stock_reserved,stock_sold`,
+    {
+      headers: requestHeaders(serviceRoleKey),
+      cache: "no-store",
+    },
+  );
+
+  if (!productsResponse.ok) throw new Error("RESERVATION_REPAIR_PRODUCT_READ_FAILED");
+  const products = (await productsResponse.json()) as ProductStockRow[];
+  let repairedProducts = 0;
+
+  for (const product of products) {
+    const expected = expectedByProduct.get(product.id) ?? 0;
+    const current = Number(product.stock_reserved);
+    const capacity = Math.max(0, Number(product.stock_total) - Number(product.stock_sold));
+    const repairedValue = Math.min(expected, capacity);
+
+    if (!Number.isFinite(current) || repairedValue <= current) continue;
+
+    const response = await fetch(
+      `${url}/rest/v1/products?id=eq.${encodeURIComponent(product.id)}&stock_reserved=eq.${encodeURIComponent(String(current))}`,
+      {
+        method: "PATCH",
+        headers: requestHeaders(serviceRoleKey, { Prefer: "return=representation" }),
+        body: JSON.stringify({ stock_reserved: repairedValue, updated_at: new Date().toISOString() }),
+        cache: "no-store",
+      },
+    );
+
+    if (!response.ok) throw new Error("RESERVATION_REPAIR_UPDATE_FAILED");
+    const updatedRows = (await response.json().catch(() => [])) as ProductStockRow[];
+    if (updatedRows.length > 0) repairedProducts += 1;
+  }
+
+  return repairedProducts;
+}
+
+export async function releaseExpiredVisrReservations() {
+  const { url, serviceRoleKey } = getConfig();
+  let response = await callReleaseExpiredReservations(url, serviceRoleKey);
+  let initialFailure = "";
 
   if (!response.ok) {
-    const failure = await response.text().catch(() => "");
+    initialFailure = await response.text().catch(() => "");
+    const isReservedStockUnderflow =
+      response.status === 400 &&
+      (initialFailure.includes("products_stock_reserved_check") || initialFailure.includes('"23514"'));
+
+    if (isReservedStockUnderflow) {
+      const repairedProducts = await repairUnderstatedReservedStock(url, serviceRoleKey);
+      console.warn(
+        JSON.stringify({
+          event: "RESERVATION_STOCK_REPAIRED",
+          repairedProducts,
+          timestamp: new Date().toISOString(),
+        }),
+      );
+      response = await callReleaseExpiredReservations(url, serviceRoleKey);
+    }
+  }
+
+  if (!response.ok) {
+    const failure = initialFailure || await response.text().catch(() => "");
     console.error(
       JSON.stringify({
         event: "RESERVATION_EXPIRY_FAILED",
