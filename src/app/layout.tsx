@@ -18,16 +18,21 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "VISR — Digital Exhibition",
+    default: "VISR — Carry Your Build",
     template: "%s — VISR",
   },
   description:
-    "Designed to disappear. Engineered to elevate. A display system created around the collection, not the frame.",
+    "Carry Your Build. A magnetic diecast display system created around the collection, not the frame.",
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
   openGraph: {
-    title: "VISR — Digital Exhibition",
-    description: "Designed to disappear. Engineered to elevate.",
+    title: "VISR — Carry Your Build",
+    description: "Carry Your Build. Designed around the collection, not the frame.",
     type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "VISR — Carry Your Build",
+    description: "Carry Your Build. Designed around the collection, not the frame.",
   },
 };
 
