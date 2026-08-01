@@ -76,7 +76,7 @@ export default async function HomePage() {
                 <div className="grid gap-7 sm:grid-cols-2">
                   <div>
                     <p className="visr-label text-white/35">Included</p>
-                    <p className="mt-3 leading-7 text-white/65">1× VISR Carry Gen 2<br />2× VISR Link</p>
+                    <p className="mt-3 leading-7 text-white/65">1× VISR Carry<br />2× VISR Link</p>
                   </div>
                   <div>
                     <p className="visr-label text-white/35">Sold Separately</p>
@@ -94,7 +94,7 @@ export default async function HomePage() {
             <p className="visr-label mb-7 text-white/42">The Invitation</p>
             <h2 className="mx-auto max-w-[11ch] text-[clamp(3rem,7vw,8rem)] font-normal leading-[0.94] tracking-[-0.055em]">Your collection deserves its moment.</h2>
             <div className="mx-auto mt-8 max-w-xl text-base leading-7 text-white/48">
-              <p>VISR Carry Gen 2 — Batch 2 Preorder.</p>
+              <p>VISR Carry — Batch 2 Preorder.</p>
               <p><span className="text-white/75">{formatRupiah(catalog.carry.price)} preorder</span> · {formatRupiah(catalog.carry.readyPrice)} ready stock.</p>
               <p>Website exclusive · {catalog.carry.stock} units currently available.</p>
             </div>
