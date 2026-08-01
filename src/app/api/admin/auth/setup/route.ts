@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
-  ADMIN_EMAIL,
   ADMIN_SESSION_COOKIE,
   ADMIN_USERNAME,
   adminSessionCookieOptions,
@@ -10,10 +9,9 @@ import {
   isOwnerConfigured,
   isValidSetupCode,
 } from "@/lib/admin/auth";
+import { clearAdminAuthAttempts, consumeAdminAuthAttempt } from "@/lib/admin/rate-limit";
 
 const setupSchema = z.object({
-  username: z.string().trim().min(1).max(64),
-  recoveryEmail: z.string().trim().email(),
   setupCode: z.string().trim().min(12).max(128),
   password: z
     .string()
@@ -24,7 +22,17 @@ const setupSchema = z.object({
     .regex(/[0-9]/, "Password needs a number."),
 });
 
+function rateLimited(retryAfterSeconds: number) {
+  return NextResponse.json(
+    { error: { code: "ADMIN_SETUP_RATE_LIMITED", message: "Too many setup attempts. Try again later." } },
+    { status: 429, headers: { "Retry-After": String(retryAfterSeconds), "Cache-Control": "no-store, max-age=0" } },
+  );
+}
+
 export async function POST(request: Request) {
+  const limit = consumeAdminAuthAttempt(request, "setup");
+  if (!limit.allowed) return rateLimited(limit.retryAfterSeconds);
+
   const body = await request.json().catch(() => null);
   const parsed = setupSchema.safeParse(body);
   if (!parsed.success) {
@@ -34,11 +42,7 @@ export async function POST(request: Request) {
     );
   }
 
-  if (
-    parsed.data.username.toLowerCase() !== ADMIN_USERNAME ||
-    parsed.data.recoveryEmail.toLowerCase() !== ADMIN_EMAIL ||
-    !isValidSetupCode(parsed.data.setupCode)
-  ) {
+  if (!isValidSetupCode(parsed.data.setupCode)) {
     return NextResponse.json(
       { error: { code: "INVALID_SETUP", message: "The VISR Control setup details are not valid." } },
       { status: 403 },
@@ -54,10 +58,12 @@ export async function POST(request: Request) {
     }
 
     await createOwnerUser(parsed.data.password);
+    clearAdminAuthAttempts(request, "setup");
     const { token, session } = createAdminSessionToken();
     const response = NextResponse.json({ ok: true, username: ADMIN_USERNAME }, { status: 201 });
     response.cookies.set(ADMIN_SESSION_COOKIE, token, adminSessionCookieOptions(session.expiresAt));
     response.headers.set("Cache-Control", "no-store, max-age=0");
+    response.headers.set("X-Robots-Tag", "noindex");
     return response;
   } catch (error) {
     console.error(JSON.stringify({
