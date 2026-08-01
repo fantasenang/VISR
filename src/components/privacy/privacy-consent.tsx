@@ -50,9 +50,7 @@ export function PrivacyConsent() {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    const stored = readStoredConsent();
-    setChoice(stored);
-    setOpen(stored === null);
+    setChoice(readStoredConsent());
     setReady(true);
   }, []);
 
@@ -79,13 +77,12 @@ export function PrivacyConsent() {
     >
       <p className="visr-label text-white/40">Privacy choices</p>
       <h2 id="visr-privacy-title" className="mt-3 text-xl tracking-[-0.025em]">
-        Keep VISR measurable—or essential only.
+        Advertising measurement is optional.
       </h2>
       <p className="mt-3 text-sm leading-6 text-white/55">
-        VISR uses essential storage for checkout. With permission, Meta and
-        Vercel measurement help us understand visits, product interest, and
-        completed purchases. Advertising measurement remains off until you
-        allow it.
+        VISR uses anonymous, cookie-free Vercel Analytics to understand website
+        traffic and performance. Meta advertising measurement remains off
+        unless you explicitly allow it here.
       </p>
       <div className="mt-5 grid gap-2 sm:grid-cols-2">
         <button
@@ -93,18 +90,18 @@ export function PrivacyConsent() {
           onClick={() => choose("granted")}
           className="rounded-full bg-white px-5 py-3 text-sm text-black transition hover:bg-white/85"
         >
-          Allow measurement
+          Allow Meta measurement
         </button>
         <button
           type="button"
           onClick={() => choose("denied")}
           className="rounded-full border border-white/15 px-5 py-3 text-sm text-white/70 transition hover:border-white/30 hover:text-white"
         >
-          Essential only
+          Keep Meta off
         </button>
       </div>
       <p className="mt-4 text-xs leading-5 text-white/35">
-        Current choice: {choice === "granted" ? "measurement allowed" : choice === "denied" ? "essential only" : "not selected"}. Read the{" "}
+        Current Meta choice: {choice === "granted" ? "allowed" : "off"}. Read the{" "}
         <Link href="/privacy" className="text-white/65 underline underline-offset-4">
           Privacy Notice
         </Link>
