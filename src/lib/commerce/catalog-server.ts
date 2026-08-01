@@ -1,4 +1,5 @@
 import { haloVariants, products } from "@/lib/commerce/catalog";
+import { releaseExpiredVisrReservations } from "@/lib/commerce/reservations";
 
 type ProductRow = {
   sku: string;
@@ -24,6 +25,18 @@ export async function getLiveCatalog() {
   let rows: ProductRow[] = [];
 
   if (supabaseUrl && serviceRoleKey) {
+    try {
+      await releaseExpiredVisrReservations();
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          event: "CATALOG_RESERVATION_CLEANUP_FAILED",
+          message: error instanceof Error ? error.message : "UNKNOWN_ERROR",
+          timestamp: new Date().toISOString(),
+        }),
+      );
+    }
+
     const query = new URLSearchParams({
       select: "sku,name,variant_name,price_idr,stock_total,stock_reserved,stock_sold,max_per_order,is_active",
     });
