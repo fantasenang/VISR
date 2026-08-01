@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
@@ -6,9 +7,10 @@ import {
   createAdminSessionToken,
   createOwnerUser,
   isOwnerConfigured,
-  isValidSetupCode,
 } from "@/lib/admin/auth";
 import { clearAdminAuthAttempts, consumeAdminAuthAttempt } from "@/lib/admin/rate-limit";
+
+const ACTIVATION_CODE_SHA256 = "872443304bb0a053da60ab7def60fc5bdd9143c4597761a9d3fa3645b23ab742";
 
 const activationSchema = z
   .object({
@@ -26,6 +28,12 @@ const activationSchema = z
     path: ["confirmPassword"],
     message: "PASSWORD_MISMATCH",
   });
+
+function isValidActivationCode(value: string) {
+  const candidate = Buffer.from(createHash("sha256").update(value.trim()).digest("hex"));
+  const expected = Buffer.from(ACTIVATION_CODE_SHA256);
+  return candidate.length === expected.length && timingSafeEqual(candidate, expected);
+}
 
 function redirectToControl(request: Request, error?: string) {
   const target = new URL("/visr-control", request.url);
@@ -60,7 +68,7 @@ export async function POST(request: Request) {
     return redirectToControl(request, mismatch ? "password_mismatch" : "invalid_password");
   }
 
-  if (!isValidSetupCode(parsed.data.setupCode)) {
+  if (!isValidActivationCode(parsed.data.setupCode)) {
     return redirectToControl(request, "invalid_setup_code");
   }
 
