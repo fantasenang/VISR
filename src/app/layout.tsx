@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import { PaymentReturnGateway } from "@/components/commerce/payment-return-gateway";
 import { ProductNameNormalizer } from "@/components/brand/product-name-normalizer";
+import { MetaPixelTracker } from "@/components/marketing/meta-pixel-tracker";
 import { ConsentAnalytics } from "@/components/privacy/consent-analytics";
 import { PrivacyConsent } from "@/components/privacy/privacy-consent";
 import "./globals.css";
@@ -43,6 +44,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body className="visr-grain antialiased">
         {children}
         <ProductNameNormalizer />
+        <MetaPixelTracker />
         <PrivacyConsent />
         <Suspense fallback={null}>
           <PaymentReturnGateway />
