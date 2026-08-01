@@ -31,7 +31,7 @@ export const products = {
     maxPerOrder: 3,
     weightGrams: 500,
     box: { lengthCm: 15, widthCm: 10, heightCm: 6 },
-    included: ["2× VISR Links", "1× New Strap", "Premium Packaging"],
+    included: ["1× VISR Link", "1× Strap", "Premium Packaging"],
   },
   halo: {
     id: "halo-collection",
