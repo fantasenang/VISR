@@ -18,7 +18,7 @@ export default function PrivacyPage() {
         <h1 className="mt-5 text-5xl tracking-[-0.055em] sm:text-7xl">
           Your order data stays tied to the VISR experience.
         </h1>
-        <p className="mt-8 max-w-2xl text-base leading-8 text-white/58">
+        <p className="mt-8 max-w-2xl text-base leading-8 text-white/60">
           VISR collects the information required to reserve, pay for, prepare,
           ship, and support your order. Optional measurement tools remain off
           until you choose to allow them.
@@ -84,6 +84,12 @@ export default function PrivacyPage() {
               ask about your order data or request a correction through VISR’s
               support channel.
             </p>
+            <a
+              href="https://wa.me/6281806288892"
+              className="mt-5 inline-flex rounded-full border border-white/15 px-5 py-2.5 text-xs uppercase tracking-[0.14em] text-white/65 transition hover:border-white/30 hover:text-white"
+            >
+              Contact VISR Support
+            </a>
           </section>
 
           <section>
