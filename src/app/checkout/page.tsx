@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { MobileOnlyPage } from "@/components/layout/mobile-only-page";
 import CheckoutClient from "./checkout-client";
 import CheckoutPolish from "./checkout-polish";
 import PreorderGate from "./preorder-gate";
@@ -51,9 +52,11 @@ export default async function CheckoutPage() {
   };
 
   return (
-    <PreorderGate forceOpen={isPreorderPreviewOverride()}>
-      <CheckoutClient products={checkoutProducts} />
-      <CheckoutPolish />
-    </PreorderGate>
+    <MobileOnlyPage>
+      <PreorderGate forceOpen={isPreorderPreviewOverride()}>
+        <CheckoutClient products={checkoutProducts} />
+        <CheckoutPolish />
+      </PreorderGate>
+    </MobileOnlyPage>
   );
 }
