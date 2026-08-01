@@ -8,7 +8,7 @@ export async function GET() {
       {
         configured,
         authenticated: Boolean(session),
-        owner: { username: ADMIN_USERNAME },
+        owner: { username: ADMIN_USERNAME, recoveryEmail: "m•••••••••••@icloud.com" },
       },
       { headers: { "Cache-Control": "no-store, max-age=0", "X-Robots-Tag": "noindex" } },
     );
