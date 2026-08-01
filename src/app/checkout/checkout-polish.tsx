@@ -11,8 +11,9 @@ const FRIENDLY_ERRORS: Record<string, string> = {
 };
 
 const COPY_REPLACEMENTS: Array<[string, string]> = [
-  ["VISR Private Reservation", "VISR Carry Gen 2 — Batch 2 Preorder"],
-  ["Complete your Batch 2 reservation.", "Reserve your VISR Carry Gen 2."],
+  ["VISR Carry Gen 2", "VISR Carry"],
+  ["VISR Private Reservation", "VISR Carry — Batch 2 Preorder"],
+  ["Complete your Batch 2 reservation.", "Reserve your VISR Carry."],
   ["Choose your halo.", "Preview Halo Collection."],
   [
     "Each Halo is 150 g. One per color.",
@@ -44,7 +45,7 @@ const STEP_BUTTON_LABELS = new Set([
 ]);
 
 const PRODUCT_FRAME_COPY = {
-  carry: "VISR Carry Gen 2",
+  carry: "VISR Carry",
   link: "Additional VISR Link",
 } as const;
 
@@ -78,7 +79,7 @@ function addPreorderNotice() {
   const header = Array.from(
     document.querySelectorAll<HTMLElement>("main > div > div"),
   ).find((element) =>
-    element.textContent?.includes("Reserve your VISR Carry Gen 2."),
+    element.textContent?.includes("Reserve your VISR Carry."),
   );
 
   if (!header) return;
