@@ -16,7 +16,7 @@ type ReservationRow = {
 
 type ProductStockRow = {
   id: string;
-  stock_sold: number;
+  stock_total: number;
 };
 
 function getConfig() {
@@ -56,43 +56,53 @@ async function readReservations(orderId: string) {
   return (await response.json()) as ReservationRow[];
 }
 
-async function decrementSoldStock(productId: string, quantity: number) {
+async function reconcileCommittedInventory() {
   const { url, serviceRoleKey } = getConfig();
-
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const productResponse = await fetch(
-      `${url}/rest/v1/products?select=id,stock_sold&id=eq.${encodeURIComponent(productId)}&limit=1`,
+  const [reservationResponse, productResponse] = await Promise.all([
+    fetch(
+      `${url}/rest/v1/inventory_reservations?select=product_id,quantity,status&status=in.(active,finalized)`,
       { headers: headers(serviceRoleKey), cache: "no-store" },
-    );
-    if (!productResponse.ok) throw new Error("ORDER_STOCK_READ_FAILED");
-    const products = (await productResponse.json()) as ProductStockRow[];
-    const product = products[0];
-    if (!product) throw new Error("ORDER_PRODUCT_NOT_FOUND");
+    ),
+    fetch(`${url}/rest/v1/products?select=id,stock_total`, {
+      headers: headers(serviceRoleKey),
+      cache: "no-store",
+    }),
+  ]);
 
-    const currentSold = Math.max(0, Number(product.stock_sold) || 0);
-    const nextSold = Math.max(0, currentSold - Math.max(0, quantity));
-    const updateResponse = await fetch(
-      `${url}/rest/v1/products?id=eq.${encodeURIComponent(productId)}&stock_sold=eq.${encodeURIComponent(String(currentSold))}`,
-      {
-        method: "PATCH",
-        headers: headers(serviceRoleKey, { Prefer: "return=representation" }),
-        body: JSON.stringify({ stock_sold: nextSold, updated_at: new Date().toISOString() }),
-        cache: "no-store",
-      },
-    );
-    if (!updateResponse.ok) throw new Error("ORDER_STOCK_RESTORE_FAILED");
-    const updated = (await updateResponse.json().catch(() => [])) as ProductStockRow[];
-    if (updated.length > 0) return currentSold - nextSold;
+  if (!reservationResponse.ok || !productResponse.ok) throw new Error("ORDER_STOCK_RECONCILIATION_READ_FAILED");
+
+  const reservations = (await reservationResponse.json()) as ReservationRow[];
+  const products = (await productResponse.json()) as ProductStockRow[];
+  const reservedByProduct = new Map<string, number>();
+  const soldByProduct = new Map<string, number>();
+
+  for (const reservation of reservations) {
+    const quantity = Number(reservation.quantity);
+    if (!reservation.product_id || !Number.isFinite(quantity) || quantity <= 0) continue;
+    const target = reservation.status === "active" ? reservedByProduct : soldByProduct;
+    target.set(reservation.product_id, (target.get(reservation.product_id) ?? 0) + quantity);
   }
 
-  throw new Error("ORDER_STOCK_CONFLICT");
+  for (const product of products) {
+    const total = Math.max(0, Number(product.stock_total) || 0);
+    const sold = Math.min(total, Math.max(0, soldByProduct.get(product.id) ?? 0));
+    const reserved = Math.min(Math.max(0, total - sold), Math.max(0, reservedByProduct.get(product.id) ?? 0));
+    const response = await fetch(`${url}/rest/v1/products?id=eq.${encodeURIComponent(product.id)}`, {
+      method: "PATCH",
+      headers: headers(serviceRoleKey, { Prefer: "return=minimal" }),
+      body: JSON.stringify({ stock_reserved: reserved, stock_sold: sold, updated_at: new Date().toISOString() }),
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error("ORDER_STOCK_RECONCILIATION_FAILED");
+  }
+
+  return products.length;
 }
 
-async function releaseFinalizedReservation(reservation: ReservationRow) {
-  const restoredQuantity = await decrementSoldStock(reservation.product_id, Number(reservation.quantity));
+async function releaseFinalizedReservations(orderId: string) {
   const { url, serviceRoleKey } = getConfig();
   const response = await fetch(
-    `${url}/rest/v1/inventory_reservations?id=eq.${encodeURIComponent(reservation.id)}&status=eq.finalized`,
+    `${url}/rest/v1/inventory_reservations?order_id=eq.${encodeURIComponent(orderId)}&status=eq.finalized`,
     {
       method: "PATCH",
       headers: headers(serviceRoleKey, { Prefer: "return=representation" }),
@@ -101,7 +111,8 @@ async function releaseFinalizedReservation(reservation: ReservationRow) {
     },
   );
   if (!response.ok) throw new Error("ORDER_RESERVATION_RELEASE_FAILED");
-  return restoredQuantity;
+  const rows = (await response.json().catch(() => [])) as ReservationRow[];
+  return rows.reduce((total, reservation) => total + Math.max(0, Number(reservation.quantity) || 0), 0);
 }
 
 export async function cancelVisrOrder(orderId: string) {
@@ -134,22 +145,18 @@ export async function cancelVisrOrder(orderId: string) {
       restoredUnits = activeReservations.reduce((total, reservation) => total + Number(reservation.quantity), 0);
     }
 
-    const orderResponse = await fetch(
-      `${url}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}`,
-      {
-        method: "PATCH",
-        headers: headers(serviceRoleKey, { Prefer: "return=representation" }),
-        body: JSON.stringify({ payment_status: "expired", updated_at: now }),
-        cache: "no-store",
-      },
-    );
+    const orderResponse = await fetch(`${url}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}`, {
+      method: "PATCH",
+      headers: headers(serviceRoleKey, { Prefer: "return=representation" }),
+      body: JSON.stringify({ payment_status: "expired", updated_at: now }),
+      cache: "no-store",
+    });
     if (!orderResponse.ok) throw new Error("ORDER_CANCELLATION_FAILED");
   } else if (order.payment_status === "paid") {
     const mayRestoreStock = !["shipped", "delivered"].includes(order.fulfillment_status);
     if (mayRestoreStock) {
-      for (const reservation of reservations.filter((item) => item.status === "finalized")) {
-        restoredUnits += await releaseFinalizedReservation(reservation);
-      }
+      restoredUnits = await releaseFinalizedReservations(orderId);
+      await reconcileCommittedInventory();
     } else {
       stockPolicy = "held";
     }
@@ -165,7 +172,10 @@ export async function cancelVisrOrder(orderId: string) {
     );
     if (!orderResponse.ok) throw new Error("ORDER_CANCELLATION_FAILED");
     const rows = (await orderResponse.json().catch(() => [])) as OrderRow[];
-    if (rows.length === 0) throw new Error("ORDER_STATUS_CHANGED");
+    if (rows.length === 0) {
+      const latest = await readOrder(orderId);
+      if (latest?.payment_status !== "refunded") throw new Error("ORDER_STATUS_CHANGED");
+    }
   } else {
     throw new Error("ORDER_NOT_CANCELLABLE");
   }
