@@ -65,15 +65,15 @@ export function HaloCollection() {
     >
       <div className={styles.inner}>
         <header className={styles.header}>
-          <p className={styles.eyebrow}>Halo / Prototype</p>
+          <p className={styles.eyebrow}>Halo Collection</p>
           <p className={styles.counter}>H01—H05</p>
         </header>
 
         <h2 id="halo-collection-title" className={styles.title}>
-          Color held at the edge.
+          Introducing Halo Collection.
         </h2>
         <p className={styles.intro}>
-          Halo is a visor prototype with a colored edge. It does not emit light—the edge appears to glow when external light enters and travels through the material.
+          A colored-edge visor designed to catch surrounding light and trace the silhouette of VISR Carry with a distinct luminous character. Five edge colors, each changing the presence of the display.
         </p>
 
         <div className={styles.stage}>
@@ -81,7 +81,7 @@ export function HaloCollection() {
             <img
               key={activeHalo.slug}
               src={`/images/halo/halo-${activeHalo.slug}.webp`}
-              alt={`${activeHalo.name} colored-edge visor prototype installed on VISR Carry`}
+              alt={`${activeHalo.name} colored-edge visor installed on VISR Carry`}
               width={447}
               height={558}
               loading="lazy"
@@ -131,10 +131,10 @@ export function HaloCollection() {
 
         <footer className={styles.footer}>
           <p className={styles.availability}>
-            Prototype in development. Final color, edge finish, and material response may change.
+            Five edge colors. Designed for VISR Carry and shaped by the light around it.
           </p>
-          <span className={styles.cta} aria-label="Halo is not yet available">
-            Prototype / Not yet available
+          <span className={styles.cta} aria-label="Halo Collection coming soon">
+            Coming Soon
           </span>
         </footer>
       </div>
