@@ -8,7 +8,7 @@ const items = [
   { label: "Halo", href: "#halo" },
 ] as const;
 
-export function SiteNavigation() {
+export function SiteNavigation({ preorderPrice }: { preorderPrice: number }) {
   const previousScrollRef = useRef(0);
   const [revealed, setRevealed] = useState(false);
   const [direction, setDirection] = useState<"up" | "down">("up");
@@ -46,6 +46,7 @@ export function SiteNavigation() {
   }, []);
 
   const visible = revealed && direction !== "down";
+  const compactPrice = `Rp${Math.round(preorderPrice / 1000)}K`;
 
   return (
     <header className="site-navigation" data-visible={visible ? "true" : "false"}>
@@ -62,8 +63,8 @@ export function SiteNavigation() {
           ))}
         </div>
 
-        <a href="#preorder" className="site-navigation__action" aria-label="View Batch 2 preorder for Rp179,000">
-          Preorder · Rp179K
+        <a href="#preorder" className="site-navigation__action" aria-label={`View Batch 2 preorder for ${preorderPrice.toLocaleString("id-ID")} rupiah`}>
+          Preorder · {compactPrice}
         </a>
       </nav>
     </header>
