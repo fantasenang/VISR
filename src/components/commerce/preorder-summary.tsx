@@ -14,7 +14,7 @@ export function PreorderSummary({ price, readyPrice, stock, forceOpen = false }:
       <div className="visr-container">
         <div className="grid gap-10 md:grid-cols-12 md:items-start">
           <div className="md:col-span-4">
-            <p className="visr-label text-white/42">VISR Carry Gen 2 · Batch 2</p>
+            <p className="visr-label text-white/42">VISR Carry · Batch 2</p>
           </div>
 
           <div className="md:col-span-7 md:col-start-6">
@@ -23,7 +23,7 @@ export function PreorderSummary({ price, readyPrice, stock, forceOpen = false }:
               <p className="pb-1 text-sm leading-5 text-white/38">preorder<br />{formatRupiah(readyPrice)} ready stock</p>
             </div>
             <p className="mt-6 max-w-md text-sm leading-6 text-white/52">
-              Includes one VISR Carry Gen 2 and two VISR Link. {stock} units currently available for Batch 2.
+              Includes one VISR Carry and two VISR Link. {stock} units currently available for Batch 2.
             </p>
             <div className="text-left [&>a]:mt-8 [&>p]:mx-0 [&>div]:mx-0">
               <PreorderCta forceOpen={forceOpen} />
