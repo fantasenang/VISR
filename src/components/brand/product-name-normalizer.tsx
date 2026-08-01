@@ -5,11 +5,14 @@ import { META_CONSENT_MARKER } from "@/lib/privacy/consent";
 
 const LEGACY_NAME = "VISR Carry Gen 2";
 const CURRENT_NAME = "VISR Carry";
+const LEGACY_PACKAGE_COPY = "Includes 2 VISR Links · Diecast car sold separately";
+const CURRENT_PACKAGE_COPY = "Includes 1 VISR Link + strap · Diecast car sold separately";
 const ATTRIBUTE_NAMES = ["aria-label", "alt", "title", "placeholder"] as const;
 
 function normalizeText(value: string) {
   return value
     .replaceAll(LEGACY_NAME, CURRENT_NAME)
+    .replaceAll(LEGACY_PACKAGE_COPY, CURRENT_PACKAGE_COPY)
     .replaceAll(META_CONSENT_MARKER, "")
     .replace(/\n{3,}/g, "\n\n");
 }
