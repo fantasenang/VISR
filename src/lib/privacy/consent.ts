@@ -1,6 +1,7 @@
 export const TRACKING_CONSENT_STORAGE_KEY = "visr_tracking_consent";
 export const TRACKING_CONSENT_COOKIE = "visr_tracking_consent";
 export const TRACKING_CONSENT_EVENT = "visr:tracking-consent";
+export const PRIVACY_CHOICES_OPEN_EVENT = "visr:open-privacy-choices";
 export const META_CONSENT_MARKER = "[[VISR_META_MEASUREMENT_GRANTED]]";
 
 const ORDER_NOTES_MAX_LENGTH = 500;
