@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { ADMIN_CANCEL_MARKER } from "@/lib/admin/order-actions";
 import { elapsedMs, logger, requestIdFrom } from "@/lib/observability/logger";
 import { apiError, readJsonBody } from "@/lib/http/api";
 
@@ -14,7 +15,14 @@ const notificationSchema = z.object({
   fraud_status: z.string().max(50).optional(),
 });
 
-type OrderRow = { id: string; order_number: string; total_idr: number; payment_status: string };
+type OrderRow = {
+  id: string;
+  order_number: string;
+  total_idr: number;
+  payment_status: string;
+  notes: string | null;
+};
+
 type MidtransStatusResponse = {
   order_id?: string;
   status_code?: string;
@@ -103,7 +111,7 @@ export async function POST(request: Request) {
   const databaseHeaders = { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` };
   const lookupStartedAt = performance.now();
   const orderResponse = await fetch(
-    `${supabaseUrl}/rest/v1/orders?order_number=eq.${encodeURIComponent(payload.order_id)}&select=id,order_number,total_idr,payment_status&limit=1`,
+    `${supabaseUrl}/rest/v1/orders?order_number=eq.${encodeURIComponent(payload.order_id)}&select=id,order_number,total_idr,payment_status,notes&limit=1`,
     { headers: databaseHeaders, cache: "no-store" },
   );
   const orderLookupDurationMs = elapsedMs(lookupStartedAt);
@@ -139,11 +147,13 @@ export async function POST(request: Request) {
     return apiError(requestId, "AMOUNT_MISMATCH", "The notified amount does not match the order total.", 409);
   }
 
-  if (order.payment_status === "refunded") {
-    logger.info("MIDTRANS_WEBHOOK_IGNORED_REFUNDED_ORDER", {
+  const adminCancelled = order.notes?.startsWith(ADMIN_CANCEL_MARKER) ?? false;
+  if (order.payment_status === "refunded" || adminCancelled) {
+    logger.info("MIDTRANS_WEBHOOK_IGNORED_CANCELLED_ORDER", {
       requestId,
       orderId: order.id,
       orderNumber: order.order_number,
+      paymentStatus: order.payment_status,
       providerStatus: payload.transaction_status,
       transactionId: payload.transaction_id ?? null,
       orderLookupDurationMs,
