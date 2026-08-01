@@ -3,7 +3,7 @@ import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Privacy Notice",
-  description: "How VISR uses essential checkout data and optional measurement tools.",
+  description: "How VISR uses order data, anonymous traffic analytics, and optional advertising measurement.",
 };
 
 export default function PrivacyPage() {
@@ -20,8 +20,9 @@ export default function PrivacyPage() {
         </h1>
         <p className="mt-8 max-w-2xl text-base leading-8 text-white/60">
           VISR collects the information required to reserve, pay for, prepare,
-          ship, and support your order. Optional measurement tools remain off
-          until you choose to allow them.
+          ship, and support your order. Anonymous website analytics help VISR
+          understand traffic and performance. Meta advertising measurement
+          remains optional and off by default.
         </p>
 
         <div className="mt-16 space-y-12 border-t border-white/10 pt-12 text-sm leading-7 text-white/55">
@@ -41,27 +42,39 @@ export default function PrivacyPage() {
             <h2 className="text-xl text-white">Essential storage</h2>
             <p className="mt-4">
               VISR uses first-party browser storage and cookies for functions
-              such as remembering your privacy choice, preserving checkout
-              state, protecting admin access, and returning you to the correct
-              payment or order screen. These functions are required for the
-              website to operate reliably.
+              such as preserving checkout state, protecting admin access, and
+              returning you to the correct payment or order screen. These
+              functions are required for the website to operate reliably.
             </p>
           </section>
 
           <section>
-            <h2 className="text-xl text-white">Optional measurement</h2>
+            <h2 className="text-xl text-white">Anonymous website analytics</h2>
             <p className="mt-4">
-              When you select “Allow measurement,” VISR may load Meta Pixel and
-              Vercel Analytics to measure page visits, product interest,
-              checkout actions, and website performance. After a completed
+              VISR uses Vercel Web Analytics and Speed Insights to understand
+              page visits, broad traffic sources, device categories, location
+              at an aggregated level, and website performance. Vercel Web
+              Analytics is designed without analytics cookies and reports
+              aggregated traffic rather than building a persistent customer
+              profile across websites.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-xl text-white">Optional Meta measurement</h2>
+            <p className="mt-4">
+              Meta Pixel remains off unless you select “Allow Meta
+              measurement” through Privacy Choices. When allowed, VISR may
+              measure product interest and checkout actions. After a completed
               production payment, VISR may also send a Purchase event to Meta
               through Conversions API. Customer identifiers used for matching
               are normalized and cryptographically hashed before transmission.
             </p>
             <p className="mt-4">
-              If you select “Essential only,” advertising and performance
-              measurement stays disabled for your browser, and the order is not
-              marked as eligible for VISR’s Meta Purchase reporting.
+              Selecting “Keep Meta off,” or making no selection, keeps Meta
+              advertising measurement disabled for your browser and prevents
+              the order from being marked as eligible for VISR’s Meta Purchase
+              reporting.
             </p>
           </section>
 
@@ -93,19 +106,19 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-xl text-white">Change your choice</h2>
+            <h2 className="text-xl text-white">Change Meta measurement</h2>
             <p className="mt-4">
               Use the <strong className="font-medium text-white/80">Privacy · Choices</strong>
-              control shown on the website to switch between optional
-              measurement and essential-only operation. The new choice applies
-              to future activity in that browser.
+              control shown on the website to allow or disable optional Meta
+              advertising measurement. The new choice applies to future
+              activity in that browser.
             </p>
           </section>
         </div>
 
         <div className="mt-16 border-t border-white/10 pt-8 text-xs leading-6 text-white/35">
           <p>VISR · Carry Your Build.</p>
-          <p className="mt-2">Last updated: 1 August 2026</p>
+          <p className="mt-2">Last updated: 2 August 2026</p>
         </div>
       </div>
     </main>
