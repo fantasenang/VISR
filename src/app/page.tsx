@@ -15,19 +15,6 @@ export default function HomePage() {
     <main>
       <SiteNavigation />
       <OpeningSequence />
-
-      <section aria-labelledby="visr-statement" className="border-y border-white/[0.07] py-24 md:py-40">
-        <div className="visr-container">
-          <p className="visr-label text-white/38">The VISR Statement</p>
-          <h2
-            id="visr-statement"
-            className="mt-7 max-w-[12ch] text-[clamp(3.4rem,8vw,9rem)] font-normal leading-[0.9] tracking-[-0.06em]"
-          >
-            Carry Your Build.
-          </h2>
-        </div>
-      </section>
-
       <PreorderSummary />
       <LinkSystem />
 
