@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ADMIN_CANCEL_MARKER } from "@/lib/admin/order-actions";
+import { sendMetaPurchaseEvent } from "@/lib/marketing/meta-conversions";
 import { elapsedMs, logger, requestIdFrom } from "@/lib/observability/logger";
 import { apiError, readJsonBody } from "@/lib/http/api";
 
@@ -18,9 +19,21 @@ const notificationSchema = z.object({
 type OrderRow = {
   id: string;
   order_number: string;
+  customer_name: string;
+  email: string;
+  whatsapp: string;
+  province: string;
+  city: string;
+  postal_code: string;
   total_idr: number;
   payment_status: string;
   notes: string | null;
+};
+
+type OrderItemRow = {
+  sku: string;
+  quantity: number;
+  unit_price_idr: number;
 };
 
 type MidtransStatusResponse = {
@@ -49,6 +62,106 @@ function normalizePaymentStatus(transactionStatus: string, fraudStatus?: string)
   if (transactionStatus === "capture" && fraudStatus === "accept") return "paid" as const;
   if (["expire", "cancel", "deny"].includes(transactionStatus)) return "expired" as const;
   return "pending" as const;
+}
+
+async function reportPaidOrderToMeta(input: {
+  order: OrderRow;
+  normalizedStatus: "paid" | "expired" | "pending";
+  isProduction: boolean;
+  supabaseUrl: string;
+  databaseHeaders: Record<string, string>;
+  requestId: string;
+}) {
+  const { order, normalizedStatus, isProduction, supabaseUrl, databaseHeaders, requestId } = input;
+  if (normalizedStatus !== "paid" || order.payment_status === "paid") return;
+
+  if (!isProduction) {
+    logger.info("META_PURCHASE_SKIPPED_SANDBOX", {
+      requestId,
+      orderId: order.id,
+      orderNumber: order.order_number,
+    });
+    return;
+  }
+
+  const itemsStartedAt = performance.now();
+  const itemsResponse = await fetch(
+    `${supabaseUrl}/rest/v1/order_items?order_id=eq.${encodeURIComponent(order.id)}&select=sku,quantity,unit_price_idr&order=created_at.asc`,
+    { headers: databaseHeaders, cache: "no-store" },
+  );
+  const itemsLookupDurationMs = elapsedMs(itemsStartedAt);
+
+  if (!itemsResponse.ok) {
+    logger.error("META_PURCHASE_ITEMS_LOOKUP_FAILED", {
+      requestId,
+      orderId: order.id,
+      orderNumber: order.order_number,
+      databaseStatus: itemsResponse.status,
+      itemsLookupDurationMs,
+    });
+    return;
+  }
+
+  const items = (await itemsResponse.json()) as OrderItemRow[];
+  if (items.length === 0) {
+    logger.error("META_PURCHASE_ITEMS_EMPTY", {
+      requestId,
+      orderId: order.id,
+      orderNumber: order.order_number,
+      itemsLookupDurationMs,
+    });
+    return;
+  }
+
+  const metaStartedAt = performance.now();
+  try {
+    const result = await sendMetaPurchaseEvent({
+      id: order.id,
+      orderNumber: order.order_number,
+      customerName: order.customer_name,
+      email: order.email,
+      whatsapp: order.whatsapp,
+      province: order.province,
+      city: order.city,
+      postalCode: order.postal_code,
+      totalIdr: order.total_idr,
+      items: items.map((item) => ({
+        sku: item.sku,
+        quantity: item.quantity,
+        unitPriceIdr: item.unit_price_idr,
+      })),
+    });
+
+    if (!result.sent) {
+      logger.warn("META_PURCHASE_NOT_CONFIGURED", {
+        requestId,
+        orderId: order.id,
+        orderNumber: order.order_number,
+        durationMs: elapsedMs(metaStartedAt),
+      });
+      return;
+    }
+
+    logger.info("META_PURCHASE_SENT", {
+      requestId,
+      orderId: order.id,
+      orderNumber: order.order_number,
+      eventsReceived: result.eventsReceived,
+      traceId: result.traceId,
+      testEvent: result.testEvent,
+      itemsLookupDurationMs,
+      durationMs: elapsedMs(metaStartedAt),
+    });
+  } catch (error) {
+    logger.error("META_PURCHASE_SEND_FAILED", {
+      requestId,
+      orderId: order.id,
+      orderNumber: order.order_number,
+      message: error instanceof Error ? error.message : "UNKNOWN_ERROR",
+      itemsLookupDurationMs,
+      durationMs: elapsedMs(metaStartedAt),
+    });
+  }
 }
 
 export async function POST(request: Request) {
@@ -111,7 +224,7 @@ export async function POST(request: Request) {
   const databaseHeaders = { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` };
   const lookupStartedAt = performance.now();
   const orderResponse = await fetch(
-    `${supabaseUrl}/rest/v1/orders?order_number=eq.${encodeURIComponent(payload.order_id)}&select=id,order_number,total_idr,payment_status,notes&limit=1`,
+    `${supabaseUrl}/rest/v1/orders?order_number=eq.${encodeURIComponent(payload.order_id)}&select=id,order_number,customer_name,email,whatsapp,province,city,postal_code,total_idr,payment_status,notes&limit=1`,
     { headers: databaseHeaders, cache: "no-store" },
   );
   const orderLookupDurationMs = elapsedMs(lookupStartedAt);
@@ -242,6 +355,15 @@ export async function POST(request: Request) {
     });
     return apiError(requestId, "PAYMENT_UPDATE_FAILED", "The payment status could not be applied.", 502);
   }
+
+  await reportPaidOrderToMeta({
+    order,
+    normalizedStatus,
+    isProduction,
+    supabaseUrl,
+    databaseHeaders,
+    requestId,
+  });
 
   const duplicate = order.payment_status === normalizedStatus;
   logger.info("MIDTRANS_WEBHOOK_APPLIED", {
