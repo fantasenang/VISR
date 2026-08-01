@@ -1,7 +1,7 @@
 .section {
   position: relative;
   isolation: isolate;
-  overflow: hidden;
+  overflow: clip;
   border-top: 1px solid rgb(255 255 255 / 7%);
   background: #020202;
   color: #f7f7f5;
@@ -11,7 +11,7 @@
   position: absolute;
   inset: 0 0 auto;
   z-index: -1;
-  height: 34rem;
+  height: 38rem;
   content: "";
   pointer-events: none;
   background:
@@ -20,10 +20,16 @@
   transition: background 420ms ease;
 }
 
-.inner {
+.introduction,
+.footer {
   width: min(100%, 430px);
   margin-inline: auto;
-  padding: 6rem 1.25rem 5rem;
+  padding-inline: 1.25rem;
+}
+
+.introduction {
+  padding-top: 6rem;
+  padding-bottom: 2rem;
 }
 
 .header {
@@ -35,8 +41,7 @@
 
 .eyebrow,
 .counter,
-.activeIndex,
-.selectorIndex {
+.activeIndex {
   margin: 0;
   font-size: 0.625rem;
   font-weight: 500;
@@ -71,9 +76,30 @@
   line-height: 1.65;
 }
 
-.stage {
+.story {
   position: relative;
-  margin-top: 3rem;
+  height: 430svh;
+}
+
+.sticky {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  height: 100svh;
+  align-items: center;
+}
+
+.stickyInner {
+  width: min(100%, 430px);
+  margin-inline: auto;
+  padding: 4.75rem 1.25rem 1.25rem;
+}
+
+.stage {
+  display: grid;
+  height: min(72svh, 650px);
+  grid-template-rows: minmax(0, 1fr) auto;
   overflow: hidden;
   border: 1px solid rgb(255 255 255 / 10%);
   background: #050505;
@@ -82,9 +108,12 @@
 
 .media {
   position: relative;
-  aspect-ratio: 4 / 5;
+  min-height: 0;
   overflow: hidden;
-  background: #060606;
+  background:
+    radial-gradient(circle at 50% 42%, var(--halo-aura, transparent), transparent 68%),
+    #060606;
+  transition: background 420ms ease;
 }
 
 .image {
@@ -92,7 +121,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  animation: halo-image-in 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: halo-image-in 360ms ease both;
 }
 
 .media::after {
@@ -111,6 +140,7 @@
   bottom: 1.15rem;
   left: 1.1rem;
   z-index: 2;
+  animation: halo-copy-in 360ms ease both;
 }
 
 .activeIndex {
@@ -135,10 +165,12 @@
 }
 
 .detail {
-  display: grid;
-  gap: 1.5rem;
+  display: flex;
+  min-height: 6.5rem;
+  align-items: center;
   padding: 1.35rem 1.1rem 1.5rem;
   border-top: 1px solid rgb(255 255 255 / 8%);
+  animation: halo-copy-in 360ms ease both;
 }
 
 .description {
@@ -149,75 +181,57 @@
   line-height: 1.65;
 }
 
-.selector {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 0.35rem;
+.progress {
   margin-top: 1rem;
 }
 
-.selectorButton {
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  color: inherit;
-  background: transparent;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
+.progressTrack {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.35rem;
 }
 
-.selectorVisual {
-  position: relative;
-  display: block;
-  aspect-ratio: 1;
-  overflow: hidden;
-  border: 1px solid rgb(255 255 255 / 9%);
-  background: #080808;
+.progressSegment {
+  height: 1px;
+  background: rgb(247 247 245 / 14%);
   transition:
-    border-color 220ms ease,
-    transform 220ms ease,
-    opacity 220ms ease;
+    height 240ms ease,
+    background-color 240ms ease,
+    box-shadow 240ms ease;
 }
 
-.selectorButton:not([aria-pressed="true"]) .selectorVisual {
-  opacity: 0.46;
-}
-
-.selectorButton[aria-pressed="true"] .selectorVisual {
-  border-color: rgb(255 255 255 / 58%);
-  transform: translateY(-0.25rem);
-}
-
-.selectorSwatch {
-  position: absolute;
-  inset: 18%;
-  border-radius: 999px;
+.progressSegment[data-active="true"] {
+  height: 3px;
   background: var(--halo-accent);
-  box-shadow:
-    0 0 0 1px rgb(255 255 255 / 18%),
-    0 0 1.3rem var(--halo-glow);
+  box-shadow: 0 0 1rem var(--halo-glow);
 }
 
-.selectorIndex {
-  display: block;
-  margin-top: 0.65rem;
-  color: rgb(247 247 245 / 30%);
-  letter-spacing: 0.1em;
-  text-align: center;
+.progress p {
+  margin: 0.75rem 0 0;
+  color: rgb(247 247 245 / 28%);
+  font-size: 0.625rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
-.selectorButton[aria-pressed="true"] .selectorIndex {
-  color: rgb(247 247 245 / 78%);
+.steps {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-rows: repeat(5, minmax(0, 1fr));
+  pointer-events: none;
+}
+
+.step {
+  min-height: 1px;
 }
 
 .footer {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
-  margin-top: 3.2rem;
-  padding-top: 1.5rem;
+  padding-top: 2.5rem;
+  padding-bottom: 5rem;
   border-top: 1px solid rgb(255 255 255 / 9%);
 }
 
@@ -237,9 +251,6 @@
   border-bottom: 1px solid rgb(255 255 255 / 12%);
   color: rgb(247 247 245 / 82%);
   font-size: 0.82rem;
-  transition:
-    color 220ms ease,
-    border-color 220ms ease;
 }
 
 .cta::after {
@@ -248,30 +259,52 @@
   font-size: 1rem;
 }
 
-.cta:active {
-  color: #fff;
-  border-color: rgb(255 255 255 / 30%);
-}
-
 @keyframes halo-image-in {
   from {
     opacity: 0;
-    transform: scale(1.025);
   }
 
   to {
     opacity: 1;
-    transform: scale(1);
+  }
+}
+
+@keyframes halo-copy-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.35rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@supports not (height: 100svh) {
+  .story {
+    height: 430vh;
+  }
+
+  .sticky {
+    height: 100vh;
+  }
+
+  .stage {
+    height: min(72vh, 650px);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .image {
+  .image,
+  .visualLabel,
+  .detail {
     animation: none;
   }
 
   .section::before,
-  .selectorVisual {
+  .media,
+  .progressSegment {
     transition: none;
   }
 }
