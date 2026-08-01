@@ -1,13 +1,17 @@
 "use client";
 
 import { useEffect } from "react";
+import { META_CONSENT_MARKER } from "@/lib/privacy/consent";
 
 const LEGACY_NAME = "VISR Carry Gen 2";
 const CURRENT_NAME = "VISR Carry";
 const ATTRIBUTE_NAMES = ["aria-label", "alt", "title", "placeholder"] as const;
 
 function normalizeText(value: string) {
-  return value.replaceAll(LEGACY_NAME, CURRENT_NAME);
+  return value
+    .replaceAll(LEGACY_NAME, CURRENT_NAME)
+    .replaceAll(META_CONSENT_MARKER, "")
+    .replace(/\n{3,}/g, "\n\n");
 }
 
 function normalizeNode(root: ParentNode) {
