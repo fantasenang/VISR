@@ -2,6 +2,11 @@ import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { reservationSchema } from "@/lib/commerce/order-schema";
 import { haloVariants, products } from "@/lib/commerce/catalog";
+import { getPreorderApiAccess } from "@/lib/commerce/preorder-server";
+import {
+  notesWithTrackingConsent,
+  readTrackingConsentFromCookieHeader,
+} from "@/lib/privacy/consent";
 import { getChargeableWeightGrams, getPackingProfile } from "@/lib/shipping/packing";
 import { calculateDomesticRates, searchDomesticDestinations } from "@/lib/shipping/rajaongkir";
 import { elapsedMs, logger, requestIdFrom } from "@/lib/observability/logger";
@@ -61,7 +66,11 @@ function pruneReservationCache(now: number) {
   for (const [key, entry] of reservationCache) if (entry.expiresAt <= now) reservationCache.delete(key);
 }
 
-async function createReservation(parsedData: typeof reservationSchema._output, requestId: string): Promise<ApiResult> {
+async function createReservation(
+  parsedData: typeof reservationSchema._output,
+  requestId: string,
+  trackingConsentGranted: boolean,
+): Promise<ApiResult> {
   const startedAt = performance.now();
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -101,7 +110,16 @@ async function createReservation(parsedData: typeof reservationSchema._output, r
     const reservationResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/reserve_visr_order`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ customer: parsedData.customer, requested_items: parsedData.items }),
+      body: JSON.stringify({
+        customer: {
+          ...parsedData.customer,
+          notes: notesWithTrackingConsent(
+            parsedData.customer.notes,
+            trackingConsentGranted,
+          ),
+        },
+        requested_items: parsedData.items,
+      }),
       cache: "no-store",
     });
     const reservationDurationMs = elapsedMs(reservationStartedAt);
@@ -163,6 +181,7 @@ async function createReservation(parsedData: typeof reservationSchema._output, r
       service: liveRate.service,
       shippingCostIdr: shipping.shipping_cost_idr,
       totalIdr: shipping.total_idr,
+      trackingConsentGranted,
       shippingQuoteDurationMs,
       reservationDurationMs,
       shippingPersistenceDurationMs,
@@ -191,6 +210,22 @@ async function createReservation(parsedData: typeof reservationSchema._output, r
 export async function POST(request: Request) {
   const requestId = requestIdFrom(request);
   const startedAt = performance.now();
+  const preorderAccess = await getPreorderApiAccess();
+
+  if (!preorderAccess.allowed) {
+    const upcoming = preorderAccess.phase === "upcoming";
+    const code = upcoming ? "PREORDER_NOT_OPEN" : "PREORDER_CLOSED";
+    const message = upcoming
+      ? "Batch 2 preorder has not opened yet."
+      : "Batch 2 preorder is closed.";
+    logger.warn("ORDER_PREORDER_WINDOW_REJECTED", {
+      requestId,
+      phase: preorderAccess.phase,
+      durationMs: elapsedMs(startedAt),
+    });
+    return apiError(requestId, code, message, 409);
+  }
+
   const body = await readJsonBody(request);
   if (!body.ok) {
     logger.warn("ORDER_INVALID_BODY", { requestId, code: body.code, durationMs: elapsedMs(startedAt) });
@@ -215,12 +250,22 @@ export async function POST(request: Request) {
     );
   }
 
+  const trackingConsentGranted =
+    readTrackingConsentFromCookieHeader(request.headers.get("cookie")) === "granted";
   const now = Date.now();
   pruneReservationCache(now);
-  const key = reservationFingerprint(parsed.data);
+  const key = reservationFingerprint({
+    order: parsed.data,
+    trackingConsentGranted,
+    preview: preorderAccess.preview,
+  });
   const existing = reservationCache.get(key);
   const replayed = Boolean(existing);
-  const promise = existing?.promise ?? createReservation(parsed.data, requestId);
+  const promise = existing?.promise ?? createReservation(
+    parsed.data,
+    requestId,
+    trackingConsentGranted,
+  );
 
   if (!existing) {
     reservationCache.set(key, { expiresAt: now + RESERVATION_CACHE_TTL_MS, promise });
