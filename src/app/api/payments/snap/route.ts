@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import {
+  isPreorderPreviewOverride,
+  wasCreatedDuringOfficialPreorder,
+} from "@/lib/commerce/preorder-server";
 import { elapsedMs, logger, requestIdFrom } from "@/lib/observability/logger";
 import { apiError, normalizeErrorBody, readJsonBody } from "@/lib/http/api";
 
 const requestSchema = z.object({ orderId: z.string().uuid() });
 
-type OrderRow = { id: string; order_number: string; customer_name: string; email: string; whatsapp: string; subtotal_idr: number; shipping_cost_idr: number; total_idr: number; payment_status: string; payment_expires_at: string };
+type OrderRow = { id: string; order_number: string; customer_name: string; email: string; whatsapp: string; subtotal_idr: number; shipping_cost_idr: number; total_idr: number; payment_status: string; payment_expires_at: string; created_at: string };
 type ItemRow = { sku: string; product_name: string; variant_name: string | null; quantity: number; unit_price_idr: number };
 type MidtransSnapResponse = { token?: string; redirect_url?: string; status_code?: string; status_message?: string; error_messages?: string[] };
 type SnapResult = { status: number; body: Record<string, unknown> };
@@ -22,7 +26,11 @@ function pruneSnapCache(now: number) {
   for (const [key, entry] of snapCache) if (entry.expiresAt <= now) snapCache.delete(key);
 }
 
-async function createSnapToken(orderId: string, requestId: string): Promise<SnapResult> {
+async function createSnapToken(
+  orderId: string,
+  requestId: string,
+  allowPreviewOrder: boolean,
+): Promise<SnapResult> {
   const startedAt = performance.now();
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -37,7 +45,7 @@ async function createSnapToken(orderId: string, requestId: string): Promise<Snap
   const headers = { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` };
   const lookupStartedAt = performance.now();
   const [orderResponse, itemsResponse] = await Promise.all([
-    fetch(`${supabaseUrl}/rest/v1/orders?id=eq.${orderId}&select=*`, { headers, cache: "no-store" }),
+    fetch(`${supabaseUrl}/rest/v1/orders?id=eq.${orderId}&select=id,order_number,customer_name,email,whatsapp,subtotal_idr,shipping_cost_idr,total_idr,payment_status,payment_expires_at,created_at`, { headers, cache: "no-store" }),
     fetch(`${supabaseUrl}/rest/v1/order_items?order_id=eq.${orderId}&select=sku,product_name,variant_name,quantity,unit_price_idr`, { headers, cache: "no-store" }),
   ]);
 
@@ -50,6 +58,25 @@ async function createSnapToken(orderId: string, requestId: string): Promise<Snap
   const items = (await itemsResponse.json()) as ItemRow[];
   const order = orders[0];
   if (!order) return { status: 404, body: failure("ORDER_NOT_FOUND", "The order could not be found.") };
+
+  const officialPreorderOrder = wasCreatedDuringOfficialPreorder(order.created_at);
+  if (!officialPreorderOrder && !allowPreviewOrder) {
+    logger.warn("MIDTRANS_ORDER_NOT_PREORDER_ELIGIBLE", {
+      requestId,
+      orderId,
+      orderNumber: order.order_number,
+      createdAt: order.created_at,
+      durationMs: elapsedMs(startedAt),
+    });
+    return {
+      status: 403,
+      body: failure(
+        "ORDER_NOT_PREORDER_ELIGIBLE",
+        "This order is not eligible for public payment.",
+      ),
+    };
+  }
+
   if (order.payment_status !== "pending") return { status: 409, body: failure("ORDER_NOT_PAYABLE", "This order is no longer payable.") };
   if (new Date(order.payment_expires_at).getTime() <= Date.now()) return { status: 409, body: failure("ORDER_EXPIRED", "The payment window for this order has expired.") };
 
@@ -95,7 +122,7 @@ async function createSnapToken(orderId: string, requestId: string): Promise<Snap
     return { status: 502, body: failure("PAYMENT_PROVIDER_UNAVAILABLE", "Payment service is temporarily unavailable. Your reservation remains active. Please try again in a few minutes.") };
   }
 
-  logger.info("MIDTRANS_SNAP_CREATED", { requestId, orderId, orderNumber: order.order_number, grossAmount, environment: isProduction ? "production" : "sandbox", providerDurationMs: elapsedMs(providerStartedAt), durationMs: elapsedMs(startedAt) });
+  logger.info("MIDTRANS_SNAP_CREATED", { requestId, orderId, orderNumber: order.order_number, grossAmount, environment: isProduction ? "production" : "sandbox", officialPreorderOrder, providerDurationMs: elapsedMs(providerStartedAt), durationMs: elapsedMs(startedAt) });
   return { status: 200, body: { token: payload.token, redirectUrl: payload.redirect_url } };
 }
 
@@ -114,17 +141,23 @@ export async function POST(request: Request) {
     return apiError(requestId, "INVALID_PAYMENT_REQUEST", "A valid order ID is required.", 400, parsed.error.flatten());
   }
 
+  const allowPreviewOrder = await isPreorderPreviewOverride();
   const now = Date.now();
   pruneSnapCache(now);
-  const existing = snapCache.get(parsed.data.orderId);
+  const cacheKey = `${parsed.data.orderId}:${allowPreviewOrder ? "preview" : "public"}`;
+  const existing = snapCache.get(cacheKey);
   const replayed = Boolean(existing);
-  const promise = existing?.promise ?? createSnapToken(parsed.data.orderId, requestId);
+  const promise = existing?.promise ?? createSnapToken(
+    parsed.data.orderId,
+    requestId,
+    allowPreviewOrder,
+  );
 
   if (!existing) {
-    snapCache.set(parsed.data.orderId, { expiresAt: now + SNAP_CACHE_TTL_MS, promise });
-    void promise.then((result) => { if (result.status < 200 || result.status >= 300) snapCache.delete(parsed.data.orderId); });
+    snapCache.set(cacheKey, { expiresAt: now + SNAP_CACHE_TTL_MS, promise });
+    void promise.then((result) => { if (result.status < 200 || result.status >= 300) snapCache.delete(cacheKey); });
   } else {
-    logger.info("MIDTRANS_SNAP_REPLAYED", { requestId, orderId: parsed.data.orderId });
+    logger.info("MIDTRANS_SNAP_REPLAYED", { requestId, orderId: parsed.data.orderId, preview: allowPreviewOrder });
   }
 
   const result = await promise;
