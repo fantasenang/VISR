@@ -11,7 +11,7 @@ const halos = [
     description: "A deep red edge treatment that becomes more pronounced when external light enters the visor.",
     accent: "#b91f2e",
     glow: "rgb(220 38 56 / 62%)",
-    aura: "rgb(185 31 46 / 18%)",
+    aura: "rgb(185 31 46 / 28%)",
   },
   {
     slug: "ice",
@@ -20,7 +20,7 @@ const halos = [
     description: "A pale, cool edge treatment that gives the visor a restrained luminous outline under direct light.",
     accent: "#d8eff5",
     glow: "rgb(216 239 245 / 62%)",
-    aura: "rgb(190 229 239 / 17%)",
+    aura: "rgb(190 229 239 / 24%)",
   },
   {
     slug: "emerald",
@@ -29,7 +29,7 @@ const halos = [
     description: "A composed green edge treatment that reveals more depth as light travels through the visor material.",
     accent: "#187a55",
     glow: "rgb(24 122 85 / 68%)",
-    aura: "rgb(24 122 85 / 18%)",
+    aura: "rgb(24 122 85 / 27%)",
   },
   {
     slug: "amber",
@@ -38,7 +38,7 @@ const halos = [
     description: "A warm amber edge treatment that becomes visually brighter when the visor is struck by light.",
     accent: "#d48722",
     glow: "rgb(212 135 34 / 66%)",
-    aura: "rgb(212 135 34 / 18%)",
+    aura: "rgb(212 135 34 / 27%)",
   },
   {
     slug: "pink",
@@ -47,19 +47,13 @@ const halos = [
     description: "A soft pink edge treatment that creates a controlled glowing impression without an internal light source.",
     accent: "#e58cac",
     glow: "rgb(229 140 172 / 65%)",
-    aura: "rgb(229 140 172 / 18%)",
+    aura: "rgb(229 140 172 / 27%)",
   },
 ] as const;
 
 export function HaloCollection() {
   const [activeIndex, setActiveIndex] = useState(0);
   const stepRefs = useRef<Array<HTMLDivElement | null>>([]);
-  const activeHalo = halos[activeIndex];
-  const sectionStyle = {
-    "--halo-aura": activeHalo.aura,
-    "--halo-accent": activeHalo.accent,
-    "--halo-glow": activeHalo.glow,
-  } as CSSProperties;
 
   useEffect(() => {
     const steps = stepRefs.current.filter((step): step is HTMLDivElement => Boolean(step));
@@ -70,9 +64,7 @@ export function HaloCollection() {
 
     const observer = new IntersectionObserver(
       (entries) => {
-        const activeEntry = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+        const activeEntry = entries.find((entry) => entry.isIntersecting);
 
         if (!activeEntry) {
           return;
@@ -80,12 +72,12 @@ export function HaloCollection() {
 
         const nextIndex = Number((activeEntry.target as HTMLElement).dataset.haloIndex);
         if (Number.isInteger(nextIndex)) {
-          setActiveIndex(nextIndex);
+          setActiveIndex((currentIndex) => (currentIndex === nextIndex ? currentIndex : nextIndex));
         }
       },
       {
-        rootMargin: "-38% 0px -38% 0px",
-        threshold: [0, 0.25, 0.5, 0.75],
+        rootMargin: "-48% 0px -48% 0px",
+        threshold: 0,
       },
     );
 
@@ -94,12 +86,7 @@ export function HaloCollection() {
   }, []);
 
   return (
-    <section
-      id="halo"
-      className={styles.section}
-      style={sectionStyle}
-      aria-labelledby="halo-collection-title"
-    >
+    <section id="halo" className={styles.section} aria-labelledby="halo-collection-title">
       <div className={styles.introduction}>
         <header className={styles.header}>
           <p className={styles.eyebrow}>Halo Collection</p>
@@ -116,43 +103,78 @@ export function HaloCollection() {
 
       <div className={styles.story}>
         <div className={styles.sticky}>
-          <div className={styles.stickyInner}>
-            <div className={styles.stage}>
-              <div className={styles.media}>
+          <div className={styles.canvas}>
+            {halos.map((halo, index) => {
+              const auraStyle = { "--halo-aura": halo.aura } as CSSProperties;
+
+              return (
+                <span
+                  key={`${halo.slug}-aura`}
+                  className={styles.auraLayer}
+                  style={auraStyle}
+                  data-active={activeIndex === index}
+                  aria-hidden="true"
+                />
+              );
+            })}
+
+            <div className={styles.imageStack}>
+              {halos.map((halo, index) => (
                 <img
-                  key={activeHalo.slug}
-                  src={`/images/halo/halo-${activeHalo.slug}.webp`}
-                  alt={`${activeHalo.name} colored-edge visor installed on VISR Carry`}
+                  key={halo.slug}
+                  src={`/images/halo/halo-${halo.slug}.webp`}
+                  alt={activeIndex === index ? `${halo.name} colored-edge visor installed on VISR Carry` : ""}
                   width={447}
                   height={558}
                   loading="lazy"
                   decoding="async"
-                  className={styles.image}
+                  className={styles.imageLayer}
+                  data-active={activeIndex === index}
+                  aria-hidden={activeIndex !== index}
                 />
+              ))}
+            </div>
 
-                <div key={`${activeHalo.slug}-label`} className={styles.visualLabel} aria-live="polite">
-                  <p className={styles.activeIndex}>
-                    {String(activeIndex + 1).padStart(2, "0")} / 05
-                  </p>
-                  <h3 className={styles.name}>{activeHalo.name}</h3>
-                  <p className={styles.line}>{activeHalo.line}</p>
+            <div className={styles.imageTreatment} aria-hidden="true" />
+
+            <div className={styles.topline} aria-hidden="true">
+              <span>Halo Collection</span>
+              <span>{String(activeIndex + 1).padStart(2, "0")} / 05</span>
+            </div>
+
+            <div className={styles.copyStack} aria-live="polite">
+              {halos.map((halo, index) => (
+                <div
+                  key={`${halo.slug}-copy`}
+                  className={styles.copyLayer}
+                  data-active={activeIndex === index}
+                  aria-hidden={activeIndex !== index}
+                >
+                  <p className={styles.activeIndex}>{String(index + 1).padStart(2, "0")} / 05</p>
+                  <h3 className={styles.name}>{halo.name}</h3>
+                  <p className={styles.line}>{halo.line}</p>
+                  <p className={styles.description}>{halo.description}</p>
                 </div>
-              </div>
-
-              <div key={`${activeHalo.slug}-detail`} className={styles.detail}>
-                <p className={styles.description}>{activeHalo.description}</p>
-              </div>
+              ))}
             </div>
 
             <div className={styles.progress} aria-hidden="true">
               <div className={styles.progressTrack}>
-                {halos.map((halo, index) => (
-                  <span
-                    key={halo.slug}
-                    className={styles.progressSegment}
-                    data-active={activeIndex === index}
-                  />
-                ))}
+                {halos.map((halo, index) => {
+                  const progressStyle = {
+                    "--halo-accent": halo.accent,
+                    "--halo-glow": halo.glow,
+                  } as CSSProperties;
+
+                  return (
+                    <span
+                      key={`${halo.slug}-progress`}
+                      className={styles.progressSegment}
+                      style={progressStyle}
+                      data-active={activeIndex === index}
+                    />
+                  );
+                })}
               </div>
               <p>Scroll to shift the edge</p>
             </div>
