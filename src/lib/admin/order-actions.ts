@@ -1,10 +1,13 @@
 import { releaseExpiredVisrReservations } from "@/lib/commerce/reservations";
 
+export const ADMIN_CANCEL_MARKER = "[[VISR_ADMIN_CANCELLED]]";
+
 type OrderRow = {
   id: string;
   order_number: string;
   payment_status: string;
   fulfillment_status: string;
+  notes: string | null;
 };
 
 type ReservationRow = {
@@ -35,10 +38,15 @@ function headers(serviceRoleKey: string, extra: Record<string, string> = {}) {
   };
 }
 
+function cancelledNotes(notes: string | null) {
+  if (notes?.startsWith(ADMIN_CANCEL_MARKER)) return notes;
+  return notes?.trim() ? `${ADMIN_CANCEL_MARKER}\n${notes.trim()}` : ADMIN_CANCEL_MARKER;
+}
+
 async function readOrder(orderId: string) {
   const { url, serviceRoleKey } = getConfig();
   const response = await fetch(
-    `${url}/rest/v1/orders?select=id,order_number,payment_status,fulfillment_status&id=eq.${encodeURIComponent(orderId)}&limit=1`,
+    `${url}/rest/v1/orders?select=id,order_number,payment_status,fulfillment_status,notes&id=eq.${encodeURIComponent(orderId)}&limit=1`,
     { headers: headers(serviceRoleKey), cache: "no-store" },
   );
   if (!response.ok) throw new Error("ORDER_STATUS_READ_FAILED");
@@ -99,10 +107,10 @@ async function reconcileCommittedInventory() {
   return products.length;
 }
 
-async function releaseFinalizedReservations(orderId: string) {
+async function releaseCommittedReservations(orderId: string) {
   const { url, serviceRoleKey } = getConfig();
   const response = await fetch(
-    `${url}/rest/v1/inventory_reservations?order_id=eq.${encodeURIComponent(orderId)}&status=eq.finalized`,
+    `${url}/rest/v1/inventory_reservations?order_id=eq.${encodeURIComponent(orderId)}&status=in.(active,finalized)`,
     {
       method: "PATCH",
       headers: headers(serviceRoleKey, { Prefer: "return=representation" }),
@@ -125,6 +133,7 @@ export async function cancelVisrOrder(orderId: string) {
   const { url, serviceRoleKey } = getConfig();
   const now = new Date().toISOString();
   const reservations = await readReservations(orderId);
+  const notes = cancelledNotes(order.notes);
   let restoredUnits = 0;
   let stockPolicy: "restored" | "held" = "restored";
 
@@ -145,17 +154,34 @@ export async function cancelVisrOrder(orderId: string) {
       restoredUnits = activeReservations.reduce((total, reservation) => total + Number(reservation.quantity), 0);
     }
 
-    const orderResponse = await fetch(`${url}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}`, {
-      method: "PATCH",
-      headers: headers(serviceRoleKey, { Prefer: "return=representation" }),
-      body: JSON.stringify({ payment_status: "expired", updated_at: now }),
-      cache: "no-store",
-    });
+    const orderResponse = await fetch(
+      `${url}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}&payment_status=eq.pending`,
+      {
+        method: "PATCH",
+        headers: headers(serviceRoleKey, { Prefer: "return=representation" }),
+        body: JSON.stringify({ payment_status: "expired", notes, updated_at: now }),
+        cache: "no-store",
+      },
+    );
     if (!orderResponse.ok) throw new Error("ORDER_CANCELLATION_FAILED");
+    const rows = (await orderResponse.json().catch(() => [])) as OrderRow[];
+    if (rows.length === 0) {
+      const latest = await readOrder(orderId);
+      if (latest?.payment_status !== "expired") throw new Error("ORDER_STATUS_CHANGED");
+      if (!latest.notes?.startsWith(ADMIN_CANCEL_MARKER)) {
+        const markerResponse = await fetch(`${url}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}`, {
+          method: "PATCH",
+          headers: headers(serviceRoleKey, { Prefer: "return=minimal" }),
+          body: JSON.stringify({ notes, updated_at: now }),
+          cache: "no-store",
+        });
+        if (!markerResponse.ok) throw new Error("ORDER_CANCELLATION_FAILED");
+      }
+    }
   } else if (order.payment_status === "paid") {
     const mayRestoreStock = !["shipped", "delivered"].includes(order.fulfillment_status);
     if (mayRestoreStock) {
-      restoredUnits = await releaseFinalizedReservations(orderId);
+      restoredUnits = await releaseCommittedReservations(orderId);
       await reconcileCommittedInventory();
     } else {
       stockPolicy = "held";
@@ -166,7 +192,7 @@ export async function cancelVisrOrder(orderId: string) {
       {
         method: "PATCH",
         headers: headers(serviceRoleKey, { Prefer: "return=representation" }),
-        body: JSON.stringify({ payment_status: "refunded", updated_at: now }),
+        body: JSON.stringify({ payment_status: "refunded", notes, updated_at: now }),
         cache: "no-store",
       },
     );
