@@ -7,6 +7,7 @@ const scriptSources = [
   "https://va.vercel-scripts.com",
   "https://app.midtrans.com",
   "https://app.sandbox.midtrans.com",
+  "https://connect.facebook.net",
 ];
 
 const contentSecurityPolicy = [
@@ -19,7 +20,7 @@ const contentSecurityPolicy = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
-  "connect-src 'self' https://vitals.vercel-insights.com https://va.vercel-scripts.com https://api.midtrans.com https://api.sandbox.midtrans.com https://app.midtrans.com https://app.sandbox.midtrans.com",
+  "connect-src 'self' https://vitals.vercel-insights.com https://va.vercel-scripts.com https://api.midtrans.com https://api.sandbox.midtrans.com https://app.midtrans.com https://app.sandbox.midtrans.com https://connect.facebook.net https://www.facebook.com",
   "frame-src https://app.midtrans.com https://app.sandbox.midtrans.com",
   "media-src 'self' blob:",
   "worker-src 'self' blob:",
