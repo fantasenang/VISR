@@ -23,7 +23,7 @@ export const commerceConfig = {
 export const products = {
   carry: {
     id: "visr-carry-gen-2",
-    name: "VISR Carry Gen 2",
+    name: "VISR Carry",
     sku: "VISR-CARRY-G2",
     price: 179_000,
     readyPrice: 199_000,
