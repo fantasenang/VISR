@@ -1,8 +1,10 @@
+import { VisrFaq } from "@/components/content/visr-faq";
 import { LinkStockStatus } from "@/components/commerce/link-stock-status";
 import { PreorderCta } from "@/components/commerce/preorder-cta";
 import { PreorderSummary } from "@/components/commerce/preorder-summary";
 import { MobileOnlyPage } from "@/components/layout/mobile-only-page";
 import { SiteNavigation } from "@/components/navigation/site-navigation";
+import { PrivacyChoicesButton } from "@/components/privacy/privacy-choices-button";
 import { CarryPhase16 } from "@/experience/carry-phase-16/carry-phase-16";
 import { HaloCollection } from "@/experience/halo-collection-revised";
 import { LinkSystem } from "@/experience/link-system/link-system";
@@ -10,6 +12,9 @@ import { OpeningSequence } from "@/experience/opening/opening-sequence";
 import { formatRupiah } from "@/lib/commerce/catalog";
 import { getLiveCatalog } from "@/lib/commerce/catalog-server";
 import { isPreorderPreviewOverride } from "@/lib/commerce/preorder-server";
+
+const footerLinkClass =
+  "w-fit text-sm text-white/48 transition-colors duration-300 hover:text-white";
 
 export default async function HomePage() {
   const previewOpen = await isPreorderPreviewOverride();
@@ -70,13 +75,13 @@ export default async function HomePage() {
                 </div>
 
                 <p className="max-w-2xl text-base leading-7 text-white/55">
-                  Preorder may close earlier when all 100 units are reserved. Production begins after the preorder period closes. Finished units are dispatched immediately after passing final inspection, without waiting for the entire batch to be completed.
+                  Preorder may close earlier when all 100 units are reserved. Production runs progressively, and finished units are dispatched in order sequence immediately after passing final inspection.
                 </p>
 
                 <div className="grid gap-7 sm:grid-cols-2">
                   <div>
                     <p className="visr-label text-white/35">Included</p>
-                    <p className="mt-3 leading-7 text-white/65">1× VISR Carry<br />2× VISR Link</p>
+                    <p className="mt-3 leading-7 text-white/65">1× VISR Carry<br />1× VISR Link<br />1× Strap</p>
                   </div>
                   <div>
                     <p className="visr-label text-white/35">Sold Separately</p>
@@ -102,19 +107,43 @@ export default async function HomePage() {
           </div>
         </section>
 
-        <footer className="border-t border-white/[0.07] py-8">
-          <div className="visr-container flex flex-col gap-5 text-xs text-white/35 md:flex-row md:items-center md:justify-between">
-            <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-6">
-              <span className="tracking-[0.16em]">VISR</span>
-              <span>Carry Your Build. / Link, Carry & Halo</span>
+        <VisrFaq />
+
+        <footer className="border-t border-white/[0.07] bg-[#030303]">
+          <div className="visr-container py-16 md:py-24">
+            <div className="grid gap-14 border-b border-white/10 pb-14 md:grid-cols-12 md:pb-20">
+              <div className="md:col-span-6">
+                <p className="visr-label text-white/35">VISR</p>
+                <h2 className="mt-6 max-w-[8ch] text-[clamp(3.4rem,7vw,7.5rem)] font-normal leading-[0.88] tracking-[-0.06em]">
+                  Carry Your Build.
+                </h2>
+                <p className="mt-8 max-w-md text-sm leading-7 text-white/42">
+                  A handmade magnetic display system for collectors who want the car—not the frame—to remain the hero.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-10 md:col-span-5 md:col-start-8">
+                <nav aria-label="Explore VISR" className="flex flex-col gap-4">
+                  <p className="visr-label mb-2 text-white/25">Explore</p>
+                  <a href="#link-system" className={footerLinkClass}>VISR Link</a>
+                  <a href="#carry" className={footerLinkClass}>VISR Carry</a>
+                  <a href="#halo" className={footerLinkClass}>Halo Collection</a>
+                  <a href="#faq" className={footerLinkClass}>FAQ</a>
+                </nav>
+
+                <nav aria-label="VISR support" className="flex flex-col gap-4">
+                  <p className="visr-label mb-2 text-white/25">Support</p>
+                  <a href="/order" className={footerLinkClass}>Track Your Order</a>
+                  <a href="https://wa.me/6281806288892" className={footerLinkClass}>WhatsApp</a>
+                  <a href="/privacy" className={footerLinkClass}>Privacy Notice</a>
+                  <PrivacyChoicesButton className={`${footerLinkClass} text-left`} />
+                </nav>
+              </div>
             </div>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
-              <a href="https://wa.me/6281806288892" className="w-fit text-white/55 transition hover:text-white">
-                WhatsApp Support
-              </a>
-              <a href="/order" className="w-fit text-white/55 transition hover:text-white">
-                View Order →
-              </a>
+
+            <div className="flex flex-col gap-4 pt-7 text-[10px] uppercase tracking-[0.16em] text-white/25 sm:flex-row sm:items-center sm:justify-between">
+              <span>VISR © 2026 · Bandung, Indonesia</span>
+              <span>Link / Carry / Halo</span>
             </div>
           </div>
         </footer>
