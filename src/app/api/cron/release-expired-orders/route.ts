@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { releaseExpiredVisrReservations } from "@/lib/commerce/reservations";
 
-const CRON_SCHEDULE = "0 * * * *";
+const CRON_SCHEDULE = "0 0 * * *";
 
 function isAuthorized(request: Request) {
   const cronSecret = process.env.CRON_SECRET?.trim();
