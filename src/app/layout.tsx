@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { PaymentReturnGateway } from "@/components/commerce/payment-return-gateway";
+import { ProductNameNormalizer } from "@/components/brand/product-name-normalizer";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -41,6 +42,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
       <body className="visr-grain antialiased">
         {children}
+        <ProductNameNormalizer />
         <Suspense fallback={null}>
           <PaymentReturnGateway />
         </Suspense>
