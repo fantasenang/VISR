@@ -1,4 +1,3 @@
-import { isPreorderPreviewOverride } from "@/lib/commerce/preorder-server";
 import { PreorderCta } from "@/components/commerce/preorder-cta";
 import { formatRupiah } from "@/lib/commerce/catalog";
 
@@ -6,11 +5,10 @@ type PreorderSummaryProps = {
   price: number;
   readyPrice: number;
   stock: number;
+  forceOpen?: boolean;
 };
 
-export function PreorderSummary({ price, readyPrice, stock }: PreorderSummaryProps) {
-  const previewOpen = isPreorderPreviewOverride();
-
+export function PreorderSummary({ price, readyPrice, stock, forceOpen = false }: PreorderSummaryProps) {
   return (
     <section id="preorder" className="border-y border-white/[0.07] bg-white/[0.018] py-16 md:py-24">
       <div className="visr-container">
@@ -28,7 +26,7 @@ export function PreorderSummary({ price, readyPrice, stock }: PreorderSummaryPro
               Includes one VISR Carry Gen 2 and two VISR Link. {stock} units currently available for Batch 2.
             </p>
             <div className="text-left [&>a]:mt-8 [&>p]:mx-0 [&>div]:mx-0">
-              <PreorderCta forceOpen={previewOpen} />
+              <PreorderCta forceOpen={forceOpen} />
             </div>
           </div>
         </div>
