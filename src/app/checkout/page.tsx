@@ -12,7 +12,11 @@ export const metadata: Metadata = {
 };
 
 export default async function CheckoutPage() {
-  const catalog = await getLiveCatalog();
+  const [catalog, previewOpen] = await Promise.all([
+    getLiveCatalog(),
+    isPreorderPreviewOverride(),
+  ]);
+
   const checkoutProducts = {
     carry: {
       id: catalog.carry.id,
@@ -53,7 +57,7 @@ export default async function CheckoutPage() {
 
   return (
     <MobileOnlyPage>
-      <PreorderGate forceOpen={isPreorderPreviewOverride()}>
+      <PreorderGate forceOpen={previewOpen}>
         <CheckoutClient products={checkoutProducts} />
         <CheckoutPolish />
       </PreorderGate>
