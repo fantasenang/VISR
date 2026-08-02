@@ -27,7 +27,6 @@ export default async function HomePage() {
         <OpeningSequence />
         <PreorderSummary
           price={catalog.carry.price}
-          readyPrice={catalog.carry.readyPrice}
           stock={catalog.carry.stock}
           forceOpen={previewOpen}
         />
@@ -100,7 +99,7 @@ export default async function HomePage() {
             <h2 className="mx-auto max-w-[11ch] text-[clamp(3rem,7vw,8rem)] font-normal leading-[0.94] tracking-[-0.055em]">Your collection deserves its moment.</h2>
             <div className="mx-auto mt-8 max-w-xl text-base leading-7 text-white/48">
               <p>VISR Carry — Batch 2 Preorder.</p>
-              <p><span className="text-white/75">{formatRupiah(catalog.carry.price)} preorder</span> · {formatRupiah(catalog.carry.readyPrice)} ready stock.</p>
+              <p><span className="text-white/75">{formatRupiah(catalog.carry.price)} preorder</span></p>
               <p>Website exclusive · {catalog.carry.stock} units currently available.</p>
             </div>
             <PreorderCta forceOpen={previewOpen} />
