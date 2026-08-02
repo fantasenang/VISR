@@ -3,8 +3,10 @@ import { getAdminSession } from "@/lib/admin/auth";
 
 const PROJECT_ID = process.env.VERCEL_ANALYTICS_PROJECT_ID?.trim() || "prj_drkQWz5kP1C3HkgMikfyBBRYVrGb";
 const TEAM_ID = process.env.VERCEL_ANALYTICS_TEAM_ID?.trim() || "team_tGUNel9cLgGbw2gHzSzuaqZp";
-const API_BASE = "https://api.vercel.com/v1/query/web-analytics/visits";
+const API_ROOT = "https://api.vercel.com/v1/query/web-analytics";
 const allowedRanges = new Set([1, 7, 30, 90]);
+const DAY_MS = 86_400_000;
+const REQUEST_TIMEOUT_MS = 8_000;
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -12,6 +14,17 @@ type AnalyticsRow = {
   label: string;
   pageViews: number;
   visitors: number | null;
+};
+
+type QueryScope = "visits" | "events";
+type QueryPath = "count" | "aggregate";
+
+type QueryInput = {
+  since: string;
+  until: string;
+  by?: string;
+  limit?: number;
+  filter?: string;
 };
 
 function asRecord(value: unknown): UnknownRecord | null {
@@ -22,40 +35,65 @@ function rowsFrom(payload: unknown) {
   const record = asRecord(payload);
   const data = record?.data;
   if (Array.isArray(data)) return data.map(asRecord).filter((row): row is UnknownRecord => Boolean(row));
-  const single = asRecord(data);
-  return single ? [single] : [];
-}
 
-function readNumber(record: UnknownRecord | null, candidates: string[]) {
-  if (!record) return null;
-  for (const key of candidates) {
-    const value = record[key];
-    if (typeof value === "number" && Number.isFinite(value)) return value;
-    if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
+  const dataRecord = asRecord(data);
+  if (!dataRecord) return [];
+
+  for (const key of ["rows", "results", "items"]) {
+    const nested = dataRecord[key];
+    if (Array.isArray(nested)) {
+      return nested.map(asRecord).filter((row): row is UnknownRecord => Boolean(row));
+    }
   }
 
-  const nested = asRecord(record.additionalProperties);
-  if (nested) {
-    for (const key of candidates) {
-      const value = nested[key];
-      if (typeof value === "number" && Number.isFinite(value)) return value;
-      if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
-    }
+  return [dataRecord];
+}
+
+function numericValue(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
+  return null;
+}
+
+function readNumberDeep(value: unknown, candidates: string[], depth = 0): number | null {
+  const record = asRecord(value);
+  if (!record) return null;
+
+  for (const key of candidates) {
+    const direct = numericValue(record[key]);
+    if (direct !== null) return direct;
+  }
+
+  if (depth >= 4) return null;
+  for (const nested of Object.values(record)) {
+    if (!asRecord(nested)) continue;
+    const found = readNumberDeep(nested, candidates, depth + 1);
+    if (found !== null) return found;
   }
 
   return null;
 }
 
 function pageViews(record: UnknownRecord | null) {
-  return readNumber(record, ["pageViews", "pageviews", "page_views", "count", "visits", "value"]) ?? 0;
+  return (
+    readNumberDeep(record, ["pageviews", "pageViews", "page_views", "count", "visits", "value", "total"]) ?? 0
+  );
 }
 
 function visitors(record: UnknownRecord | null) {
-  return readNumber(record, ["visitors", "uniqueVisitors", "unique_visitors", "unique", "users"]);
+  return readNumberDeep(record, ["visitors", "uniqueVisitors", "unique_visitors", "unique", "users"]);
 }
 
 function labelFor(record: UnknownRecord, dimension: string) {
-  const candidates = dimension === "day" ? ["timestamp", "day", "date"] : [dimension];
+  const leaf = dimension.split("/").at(-1) ?? dimension;
+  const candidates = [
+    dimension,
+    leaf,
+    dimension === "day" ? "timestamp" : "",
+    dimension === "day" ? "date" : "",
+    dimension.startsWith("eventData/") ? "eventData" : "",
+  ].filter(Boolean);
+
   for (const key of candidates) {
     const value = record[key];
     if (typeof value === "string" && value.trim()) return value;
@@ -71,7 +109,26 @@ function normalizeRows(payload: unknown, dimension: string): AnalyticsRow[] {
       pageViews: pageViews(row),
       visitors: visitors(row),
     }))
-    .filter((row) => row.pageViews > 0 || (row.visitors ?? 0) > 0);
+    .filter((row) => row.pageViews > 0 || (row.visitors ?? 0) > 0)
+    .sort((left, right) => right.pageViews - left.pageViews);
+}
+
+function mergeRows(...groups: AnalyticsRow[][]) {
+  const merged = new Map<string, AnalyticsRow>();
+  for (const rows of groups) {
+    for (const row of rows) {
+      const current = merged.get(row.label);
+      merged.set(row.label, {
+        label: row.label,
+        pageViews: (current?.pageViews ?? 0) + row.pageViews,
+        visitors:
+          current?.visitors === null && row.visitors === null
+            ? null
+            : Math.max(current?.visitors ?? 0, row.visitors ?? 0),
+      });
+    }
+  }
+  return [...merged.values()].sort((left, right) => right.pageViews - left.pageViews);
 }
 
 function jakartaStartOfToday() {
@@ -85,40 +142,66 @@ function jakartaStartOfToday() {
   return new Date(`${date}T00:00:00+07:00`).toISOString();
 }
 
-function analyticsUrl(path: "count" | "aggregate", input: {
-  since: string;
-  until: string;
-  by?: string;
-  limit?: number;
-}) {
-  const url = new URL(`${API_BASE}/${path}`);
+function analyticsUrl(scope: QueryScope, path: QueryPath, input: QueryInput) {
+  const url = new URL(`${API_ROOT}/${scope}/${path}`);
   url.searchParams.set("projectId", PROJECT_ID);
   url.searchParams.set("teamId", TEAM_ID);
   url.searchParams.set("since", input.since);
   url.searchParams.set("until", input.until);
   if (input.by) url.searchParams.append("by", input.by);
   if (input.limit) url.searchParams.set("limit", String(input.limit));
+  if (input.filter) url.searchParams.set("filter", input.filter);
   return url;
 }
 
-async function queryVercel(token: string, path: "count" | "aggregate", input: {
-  since: string;
-  until: string;
-  by?: string;
-  limit?: number;
-}) {
-  const response = await fetch(analyticsUrl(path, input), {
-    headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-    cache: "no-store",
-  });
+async function queryVercel(token: string, scope: QueryScope, path: QueryPath, input: QueryInput) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-  const payload = (await response.json().catch(() => ({}))) as unknown;
-  if (!response.ok) {
-    const error = asRecord(payload)?.error;
-    const message = asRecord(error)?.message;
-    throw new Error(typeof message === "string" ? message : `VERCEL_ANALYTICS_${response.status}`);
+  try {
+    const response = await fetch(analyticsUrl(scope, path, input), {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      cache: "no-store",
+      signal: controller.signal,
+    });
+
+    const payload = (await response.json().catch(() => ({}))) as unknown;
+    if (!response.ok) {
+      const error = asRecord(payload)?.error;
+      const message = asRecord(error)?.message;
+      throw new Error(typeof message === "string" ? message : `VERCEL_ANALYTICS_${response.status}`);
+    }
+    return payload;
+  } finally {
+    clearTimeout(timeout);
   }
-  return payload;
+}
+
+async function optionalQuery(token: string, scope: QueryScope, path: QueryPath, input: QueryInput) {
+  try {
+    return await queryVercel(token, scope, path, input);
+  } catch {
+    return null;
+  }
+}
+
+function countMetrics(payload: unknown) {
+  const record = asRecord(asRecord(payload)?.data) ?? rowsFrom(payload)[0] ?? null;
+  return { pageViews: pageViews(record), visitors: visitors(record) };
+}
+
+function sumPageViews(rows: AnalyticsRow[]) {
+  return rows.reduce((total, row) => total + row.pageViews, 0);
+}
+
+function bestVisitorFallback(rows: AnalyticsRow[]) {
+  const available = rows.map((row) => row.visitors).filter((value): value is number => value !== null);
+  return available.length > 0 ? Math.max(...available) : null;
+}
+
+function percentChange(current: number | null, previous: number | null) {
+  if (current === null || previous === null || previous <= 0) return null;
+  return Number((((current - previous) / previous) * 100).toFixed(1));
 }
 
 export async function GET(request: Request) {
@@ -145,43 +228,130 @@ export async function GET(request: Request) {
 
   const requestedRange = Number(new URL(request.url).searchParams.get("days") ?? 7);
   const days = allowedRanges.has(requestedRange) ? requestedRange : 7;
-  const until = new Date().toISOString();
-  const since = new Date(Date.now() - days * 86_400_000).toISOString();
+  const untilMs = Date.now();
+  const until = new Date(untilMs).toISOString();
+  const since = days === 1 ? jakartaStartOfToday() : new Date(untilMs - days * DAY_MS).toISOString();
+  const durationMs = Math.max(1, untilMs - new Date(since).getTime());
+  const previousUntil = since;
+  const previousSince = new Date(new Date(since).getTime() - durationMs).toISOString();
 
   try {
-    const [totalPayload, todayPayload, trendPayload, pagesPayload, referrersPayload, devicesPayload, countriesPayload, browsersPayload] =
-      await Promise.all([
-        queryVercel(token, "count", { since, until }),
-        queryVercel(token, "count", { since: jakartaStartOfToday(), until }),
-        queryVercel(token, "aggregate", { since, until, by: "day", limit: Math.min(days + 2, 92) }),
-        queryVercel(token, "aggregate", { since, until, by: "requestPath", limit: 8 }),
-        queryVercel(token, "aggregate", { since, until, by: "referrerHostname", limit: 8 }),
-        queryVercel(token, "aggregate", { since, until, by: "deviceType", limit: 8 }),
-        queryVercel(token, "aggregate", { since, until, by: "country", limit: 8 }),
-        queryVercel(token, "aggregate", { since, until, by: "browserName", limit: 8 }),
-      ]);
+    const [
+      totalPayload,
+      todayPayload,
+      previousPayload,
+      trendPayload,
+      pagesPayload,
+      referrersPayload,
+      devicesPayload,
+      countriesPayload,
+      browsersPayload,
+      osPayload,
+      utmSourcesPayload,
+      utmMediumsPayload,
+      utmCampaignsPayload,
+      eventsPayload,
+      sectionsPayload,
+      ctaActionsPayload,
+      supportActionsPayload,
+      checkoutStepsPayload,
+    ] = await Promise.all([
+      queryVercel(token, "visits", "count", { since, until }),
+      optionalQuery(token, "visits", "count", { since: jakartaStartOfToday(), until }),
+      optionalQuery(token, "visits", "count", { since: previousSince, until: previousUntil }),
+      optionalQuery(token, "visits", "aggregate", { since, until, by: "day", limit: Math.min(days + 2, 92) }),
+      optionalQuery(token, "visits", "aggregate", { since, until, by: "requestPath", limit: 12 }),
+      optionalQuery(token, "visits", "aggregate", { since, until, by: "referrerHostname", limit: 12 }),
+      optionalQuery(token, "visits", "aggregate", { since, until, by: "deviceType", limit: 10 }),
+      optionalQuery(token, "visits", "aggregate", { since, until, by: "country", limit: 12 }),
+      optionalQuery(token, "visits", "aggregate", { since, until, by: "browserName", limit: 10 }),
+      optionalQuery(token, "visits", "aggregate", { since, until, by: "osName", limit: 10 }),
+      optionalQuery(token, "visits", "aggregate", { since, until, by: "utmSource", limit: 12 }),
+      optionalQuery(token, "visits", "aggregate", { since, until, by: "utmMedium", limit: 12 }),
+      optionalQuery(token, "visits", "aggregate", { since, until, by: "utmCampaign", limit: 12 }),
+      optionalQuery(token, "events", "aggregate", { since, until, by: "eventName", limit: 20 }),
+      optionalQuery(token, "events", "aggregate", {
+        since,
+        until,
+        by: "eventData/section",
+        filter: "eventName eq 'Section viewed'",
+        limit: 12,
+      }),
+      optionalQuery(token, "events", "aggregate", {
+        since,
+        until,
+        by: "eventData/action",
+        filter: "eventName eq 'CTA clicked'",
+        limit: 12,
+      }),
+      optionalQuery(token, "events", "aggregate", {
+        since,
+        until,
+        by: "eventData/action",
+        filter: "eventName eq 'Support clicked'",
+        limit: 12,
+      }),
+      optionalQuery(token, "events", "aggregate", {
+        since,
+        until,
+        by: "eventData/step",
+        filter: "eventName eq 'Checkout step'",
+        limit: 10,
+      }),
+    ]);
 
-    const totalRecord = rowsFrom(totalPayload)[0] ?? asRecord(asRecord(totalPayload)?.data);
-    const todayRecord = rowsFrom(todayPayload)[0] ?? asRecord(asRecord(todayPayload)?.data);
-    const totalPageViews = pageViews(totalRecord);
-    const totalVisitors = visitors(totalRecord);
+    const trend = normalizeRows(trendPayload, "day").sort(
+      (left, right) => new Date(left.label).getTime() - new Date(right.label).getTime(),
+    );
+    const pages = normalizeRows(pagesPayload, "requestPath");
+    const total = countMetrics(totalPayload);
+    const today = countMetrics(todayPayload);
+    const previous = countMetrics(previousPayload);
+
+    const aggregateFallback = Math.max(sumPageViews(trend), sumPageViews(pages));
+    const totalPageViews = total.pageViews > 0 ? total.pageViews : aggregateFallback;
+    const totalVisitors =
+      total.visitors !== null && total.visitors > 0
+        ? total.visitors
+        : bestVisitorFallback(pages) ?? bestVisitorFallback(trend) ?? (totalPageViews === 0 ? 0 : null);
+    const todayPageViews = days === 1 && today.pageViews === 0 ? totalPageViews : today.pageViews;
+    const todayVisitors =
+      days === 1 && (today.visitors === null || today.visitors === 0) ? totalVisitors : today.visitors;
 
     return NextResponse.json(
       {
-        range: { days, since, until },
+        range: { days, since, until, previousSince, previousUntil },
         summary: {
           pageViews: totalPageViews,
           visitors: totalVisitors,
-          todayPageViews: pageViews(todayRecord),
-          todayVisitors: visitors(todayRecord),
-          viewsPerVisitor: totalVisitors && totalVisitors > 0 ? Number((totalPageViews / totalVisitors).toFixed(2)) : null,
+          todayPageViews,
+          todayVisitors,
+          viewsPerVisitor:
+            totalVisitors && totalVisitors > 0 ? Number((totalPageViews / totalVisitors).toFixed(2)) : null,
+          previousPageViews: previous.pageViews,
+          previousVisitors: previous.visitors,
+          pageViewsChange: percentChange(totalPageViews, previous.pageViews),
+          visitorsChange: percentChange(totalVisitors, previous.visitors),
         },
-        trend: normalizeRows(trendPayload, "day"),
-        pages: normalizeRows(pagesPayload, "requestPath"),
+        trend,
+        pages,
         referrers: normalizeRows(referrersPayload, "referrerHostname"),
         devices: normalizeRows(devicesPayload, "deviceType"),
         countries: normalizeRows(countriesPayload, "country"),
         browsers: normalizeRows(browsersPayload, "browserName"),
+        operatingSystems: normalizeRows(osPayload, "osName"),
+        utmSources: normalizeRows(utmSourcesPayload, "utmSource"),
+        utmMediums: normalizeRows(utmMediumsPayload, "utmMedium"),
+        utmCampaigns: normalizeRows(utmCampaignsPayload, "utmCampaign"),
+        behavior: {
+          events: normalizeRows(eventsPayload, "eventName"),
+          sections: normalizeRows(sectionsPayload, "eventData/section"),
+          actions: mergeRows(
+            normalizeRows(ctaActionsPayload, "eventData/action"),
+            normalizeRows(supportActionsPayload, "eventData/action"),
+          ),
+          checkoutSteps: normalizeRows(checkoutStepsPayload, "eventData/step"),
+        },
         updatedAt: new Date().toISOString(),
       },
       { headers: { "Cache-Control": "no-store, max-age=0" } },
