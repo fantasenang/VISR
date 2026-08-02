@@ -1,3 +1,5 @@
+import { calculateShippingDiscount } from "@/lib/shipping";
+
 const BASE_URL = "https://rajaongkir.komerce.id/api/v1";
 
 export type RajaOngkirDestination = {
@@ -16,6 +18,8 @@ export type RajaOngkirRate = {
   service: string;
   description: string;
   costIdr: number;
+  originalCostIdr: number;
+  discountIdr: number;
   etd: string;
 };
 
@@ -124,12 +128,18 @@ export async function calculateDomesticRates(input: {
     etd: string;
   }>>>(response, "domestic-rate");
 
-  return (payload.data ?? []).map((item) => ({
-    courierName: item.name,
-    courierCode: item.code.toLowerCase(),
-    service: item.service.toUpperCase(),
-    description: item.description,
-    costIdr: Number(item.cost),
-    etd: item.etd,
-  })) satisfies RajaOngkirRate[];
+  return (payload.data ?? []).map((item) => {
+    const shipping = calculateShippingDiscount(Number(item.cost));
+
+    return {
+      courierName: item.name,
+      courierCode: item.code.toLowerCase(),
+      service: item.service.toUpperCase(),
+      description: item.description,
+      costIdr: shipping.payableCostIdr,
+      originalCostIdr: shipping.quotedCostIdr,
+      discountIdr: shipping.discountIdr,
+      etd: item.etd,
+    };
+  }) satisfies RajaOngkirRate[];
 }
