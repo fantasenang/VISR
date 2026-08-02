@@ -7,8 +7,26 @@ const API_ROOT = "https://api.vercel.com/v1/query/web-analytics";
 const allowedRanges = new Set([1, 7, 30, 90]);
 const DAY_MS = 86_400_000;
 const REQUEST_TIMEOUT_MS = 8_000;
+const QUERY_CONCURRENCY = 4;
 
 type UnknownRecord = Record<string, unknown>;
+type QueryScope = "visits" | "events";
+type QueryPath = "count" | "aggregate";
+
+type QueryInput = {
+  since: string;
+  until: string;
+  by?: string;
+  limit?: number;
+  filter?: string;
+};
+
+type QueryTask = {
+  key: string;
+  scope: QueryScope;
+  path: QueryPath;
+  input: QueryInput;
+};
 
 type AnalyticsRow = {
   label: string;
@@ -19,17 +37,6 @@ type AnalyticsRow = {
 type FunnelRow = AnalyticsRow & {
   rateFromVisitors: number | null;
   rateFromPrevious: number | null;
-};
-
-type QueryScope = "visits" | "events";
-type QueryPath = "count" | "aggregate";
-
-type QueryInput = {
-  since: string;
-  until: string;
-  by?: string;
-  limit?: number;
-  filter?: string;
 };
 
 function asRecord(value: unknown): UnknownRecord | null {
@@ -69,11 +76,31 @@ function readNumberDeep(value: unknown, candidates: string[], depth = 0): number
     if (direct !== null) return direct;
   }
 
-  if (depth >= 4) return null;
+  if (depth >= 5) return null;
   for (const nested of Object.values(record)) {
     if (!asRecord(nested)) continue;
     const found = readNumberDeep(nested, candidates, depth + 1);
     if (found !== null) return found;
+  }
+
+  return null;
+}
+
+function readLabelDeep(value: unknown, candidates: string[], depth = 0): string | null {
+  const record = asRecord(value);
+  if (!record) return null;
+
+  for (const key of candidates) {
+    const direct = record[key];
+    if (typeof direct === "string" && direct.trim()) return direct;
+    if (typeof direct === "number" && Number.isFinite(direct)) return String(direct);
+  }
+
+  if (depth >= 5) return null;
+  for (const nested of Object.values(record)) {
+    if (!asRecord(nested)) continue;
+    const found = readLabelDeep(nested, candidates, depth + 1);
+    if (found) return found;
   }
 
   return null;
@@ -89,31 +116,38 @@ function visitors(record: UnknownRecord | null) {
 
 function labelFor(record: UnknownRecord, dimension: string) {
   const leaf = dimension.split("/").at(-1) ?? dimension;
-  const candidates = [
-    dimension,
-    leaf,
-    dimension === "day" ? "timestamp" : "",
-    dimension === "day" ? "date" : "",
-    dimension.startsWith("eventData/") ? "eventData" : "",
-  ].filter(Boolean);
-
-  for (const key of candidates) {
-    const value = record[key];
-    if (typeof value === "string" && value.trim()) return value;
-    if (typeof value === "number") return String(value);
-  }
-  return "Unknown";
+  return (
+    readLabelDeep(record, [
+      dimension,
+      leaf,
+      dimension === "day" ? "timestamp" : "",
+      dimension === "day" ? "date" : "",
+      dimension.startsWith("eventData/") ? "eventData" : "",
+    ].filter(Boolean)) ?? "Unknown"
+  );
 }
 
 function normalizeRows(payload: unknown, dimension: string): AnalyticsRow[] {
-  return rowsFrom(payload)
-    .map((row) => ({
-      label: labelFor(row, dimension),
-      pageViews: pageViews(row),
-      visitors: visitors(row),
-    }))
-    .filter((row) => row.pageViews > 0 || (row.visitors ?? 0) > 0)
-    .sort((left, right) => right.pageViews - left.pageViews);
+  const merged = new Map<string, AnalyticsRow>();
+
+  for (const row of rowsFrom(payload)) {
+    const label = labelFor(row, dimension);
+    const count = pageViews(row);
+    const unique = visitors(row);
+    if (count <= 0 && (unique ?? 0) <= 0) continue;
+
+    const current = merged.get(label);
+    merged.set(label, {
+      label,
+      pageViews: (current?.pageViews ?? 0) + count,
+      visitors:
+        current?.visitors === null && unique === null
+          ? null
+          : Math.max(current?.visitors ?? 0, unique ?? 0),
+    });
+  }
+
+  return [...merged.values()].sort((left, right) => right.pageViews - left.pageViews);
 }
 
 function mergeRows(...groups: AnalyticsRow[][]) {
@@ -180,12 +214,34 @@ async function queryVercel(token: string, scope: QueryScope, path: QueryPath, in
   }
 }
 
-async function optionalQuery(token: string, scope: QueryScope, path: QueryPath, input: QueryInput) {
-  try {
-    return await queryVercel(token, scope, path, input);
-  } catch {
-    return null;
+async function runOptionalQueries(token: string, tasks: QueryTask[]) {
+  const results = new Map<string, unknown>();
+  const failures: Array<{ key: string; message: string }> = [];
+  let cursor = 0;
+
+  async function worker() {
+    while (cursor < tasks.length) {
+      const index = cursor;
+      cursor += 1;
+      const task = tasks[index];
+      try {
+        results.set(task.key, await queryVercel(token, task.scope, task.path, task.input));
+      } catch (error) {
+        failures.push({
+          key: task.key,
+          message: error instanceof Error ? error.message : "UNKNOWN_ERROR",
+        });
+      }
+    }
   }
+
+  await Promise.all(Array.from({ length: Math.min(QUERY_CONCURRENCY, tasks.length) }, () => worker()));
+  return {
+    get(key: string) {
+      return results.get(key) ?? null;
+    },
+    failures,
+  };
 }
 
 function countMetrics(payload: unknown) {
@@ -283,173 +339,62 @@ export async function GET(request: Request) {
 
   const requestedRange = Number(new URL(request.url).searchParams.get("days") ?? 7);
   const days = allowedRanges.has(requestedRange) ? requestedRange : 7;
+  const queryDays = days === 90 ? 62 : days;
   const untilMs = Date.now();
   const until = new Date(untilMs).toISOString();
-  const since = days === 1 ? jakartaStartOfToday() : new Date(untilMs - days * DAY_MS).toISOString();
+  const since = queryDays === 1 ? jakartaStartOfToday() : new Date(untilMs - queryDays * DAY_MS).toISOString();
   const durationMs = Math.max(1, untilMs - new Date(since).getTime());
   const previousUntil = since;
   const previousSince = new Date(new Date(since).getTime() - durationMs).toISOString();
 
   try {
-    const [
-      totalPayload,
-      todayPayload,
-      previousPayload,
-      trendPayload,
-      pagesPayload,
-      referrersPayload,
-      devicesPayload,
-      countriesPayload,
-      browsersPayload,
-      osPayload,
-      utmSourcesPayload,
-      utmMediumsPayload,
-      utmCampaignsPayload,
-      eventsPayload,
-      sectionsPayload,
-      ctaActionsPayload,
-      supportActionsPayload,
-      checkoutStepsPayload,
-      landingPagesPayload,
-      sourceTypesPayload,
-      viewportsPayload,
-      orientationsPayload,
-      visitHoursPayload,
-      weekdaysPayload,
-      scrollDepthPayload,
-      engagedTimePayload,
-      exitSectionsPayload,
-      sectionsSeenPayload,
-      pageSummariesPayload,
-    ] = await Promise.all([
-      queryVercel(token, "visits", "count", { since, until }),
-      optionalQuery(token, "visits", "count", { since: jakartaStartOfToday(), until }),
-      optionalQuery(token, "visits", "count", { since: previousSince, until: previousUntil }),
-      optionalQuery(token, "visits", "aggregate", { since, until, by: "day", limit: Math.min(days + 2, 92) }),
-      optionalQuery(token, "visits", "aggregate", { since, until, by: "requestPath", limit: 15 }),
-      optionalQuery(token, "visits", "aggregate", { since, until, by: "referrerHostname", limit: 15 }),
-      optionalQuery(token, "visits", "aggregate", { since, until, by: "deviceType", limit: 10 }),
-      optionalQuery(token, "visits", "aggregate", { since, until, by: "country", limit: 15 }),
-      optionalQuery(token, "visits", "aggregate", { since, until, by: "browserName", limit: 10 }),
-      optionalQuery(token, "visits", "aggregate", { since, until, by: "osName", limit: 10 }),
-      optionalQuery(token, "visits", "aggregate", { since, until, by: "utmSource", limit: 15 }),
-      optionalQuery(token, "visits", "aggregate", { since, until, by: "utmMedium", limit: 15 }),
-      optionalQuery(token, "visits", "aggregate", { since, until, by: "utmCampaign", limit: 15 }),
-      optionalQuery(token, "events", "aggregate", { since, until, by: "eventName", limit: 30 }),
-      optionalQuery(token, "events", "aggregate", {
-        since,
-        until,
-        by: "eventData/section",
-        filter: "eventName eq 'Section viewed'",
-        limit: 15,
-      }),
-      optionalQuery(token, "events", "aggregate", {
-        since,
-        until,
-        by: "eventData/action",
-        filter: "eventName eq 'CTA clicked'",
-        limit: 15,
-      }),
-      optionalQuery(token, "events", "aggregate", {
-        since,
-        until,
-        by: "eventData/action",
-        filter: "eventName eq 'Support clicked'",
-        limit: 15,
-      }),
-      optionalQuery(token, "events", "aggregate", {
-        since,
-        until,
-        by: "eventData/step",
-        filter: "eventName eq 'Checkout step'",
-        limit: 10,
-      }),
-      optionalQuery(token, "events", "aggregate", {
-        since,
-        until,
-        by: "eventData/landingPath",
-        filter: "eventName eq 'Session started'",
-        limit: 15,
-      }),
-      optionalQuery(token, "events", "aggregate", {
-        since,
-        until,
-        by: "eventData/sourceType",
-        filter: "eventName eq 'Session started'",
-        limit: 12,
-      }),
-      optionalQuery(token, "events", "aggregate", {
-        since,
-        until,
-        by: "eventData/viewport",
-        filter: "eventName eq 'Session started'",
-        limit: 10,
-      }),
-      optionalQuery(token, "events", "aggregate", {
-        since,
-        until,
-        by: "eventData/orientation",
-        filter: "eventName eq 'Session started'",
-        limit: 5,
-      }),
-      optionalQuery(token, "events", "aggregate", {
-        since,
-        until,
-        by: "eventData/hourWib",
-        filter: "eventName eq 'Session started'",
-        limit: 24,
-      }),
-      optionalQuery(token, "events", "aggregate", {
-        since,
-        until,
-        by: "eventData/weekdayWib",
-        filter: "eventName eq 'Session started'",
-        limit: 7,
-      }),
-      optionalQuery(token, "events", "aggregate", {
-        since,
-        until,
-        by: "eventData/maxScroll",
-        filter: "eventName eq 'Session summary'",
-        limit: 8,
-      }),
-      optionalQuery(token, "events", "aggregate", {
-        since,
-        until,
-        by: "eventData/engagedTime",
-        filter: "eventName eq 'Session summary'",
-        limit: 8,
-      }),
-      optionalQuery(token, "events", "aggregate", {
-        since,
-        until,
-        by: "eventData/lastSection",
-        filter: "eventName eq 'Session summary'",
-        limit: 15,
-      }),
-      optionalQuery(token, "events", "aggregate", {
-        since,
-        until,
-        by: "eventData/sectionsSeen",
-        filter: "eventName eq 'Session summary'",
-        limit: 8,
-      }),
-      optionalQuery(token, "events", "aggregate", {
-        since,
-        until,
-        by: "eventData/path",
-        filter: "eventName eq 'Session summary'",
-        limit: 15,
-      }),
+    const totalPayload = await queryVercel(token, "visits", "count", { since, until });
+    const optional = await runOptionalQueries(token, [
+      { key: "today", scope: "visits", path: "count", input: { since: jakartaStartOfToday(), until } },
+      { key: "previous", scope: "visits", path: "count", input: { since: previousSince, until: previousUntil } },
+      { key: "trend", scope: "visits", path: "aggregate", input: { since, until, by: "day", limit: Math.min(queryDays + 2, 64) } },
+      { key: "pages", scope: "visits", path: "aggregate", input: { since, until, by: "requestPath", limit: 15 } },
+      { key: "referrers", scope: "visits", path: "aggregate", input: { since, until, by: "referrerHostname", limit: 15 } },
+      { key: "devices", scope: "visits", path: "aggregate", input: { since, until, by: "deviceType", limit: 10 } },
+      { key: "countries", scope: "visits", path: "aggregate", input: { since, until, by: "country", limit: 15 } },
+      { key: "browsers", scope: "visits", path: "aggregate", input: { since, until, by: "browserName", limit: 10 } },
+      { key: "os", scope: "visits", path: "aggregate", input: { since, until, by: "osName", limit: 10 } },
+      { key: "utmSources", scope: "visits", path: "aggregate", input: { since, until, by: "utmSource", limit: 15 } },
+      { key: "utmMediums", scope: "visits", path: "aggregate", input: { since, until, by: "utmMedium", limit: 15 } },
+      { key: "utmCampaigns", scope: "visits", path: "aggregate", input: { since, until, by: "utmCampaign", limit: 15 } },
+      { key: "events", scope: "events", path: "aggregate", input: { since, until, by: "eventName", limit: 30 } },
+      { key: "sections", scope: "events", path: "aggregate", input: { since, until, by: "eventData/section", filter: "eventName eq 'Section viewed'", limit: 15 } },
+      { key: "ctaActions", scope: "events", path: "aggregate", input: { since, until, by: "eventData/action", filter: "eventName eq 'CTA clicked'", limit: 15 } },
+      { key: "supportActions", scope: "events", path: "aggregate", input: { since, until, by: "eventData/action", filter: "eventName eq 'Support clicked'", limit: 15 } },
+      { key: "checkoutSteps", scope: "events", path: "aggregate", input: { since, until, by: "eventData/step", filter: "eventName eq 'Checkout step'", limit: 10 } },
+      { key: "landingPages", scope: "events", path: "aggregate", input: { since, until, by: "eventData/landingPath", filter: "eventName eq 'Session started'", limit: 15 } },
+      { key: "sourceTypes", scope: "events", path: "aggregate", input: { since, until, by: "eventData/sourceType", filter: "eventName eq 'Session started'", limit: 12 } },
+      { key: "viewports", scope: "events", path: "aggregate", input: { since, until, by: "eventData/viewport", filter: "eventName eq 'Session started'", limit: 10 } },
+      { key: "orientations", scope: "events", path: "aggregate", input: { since, until, by: "eventData/orientation", filter: "eventName eq 'Session started'", limit: 5 } },
+      { key: "visitHours", scope: "events", path: "aggregate", input: { since, until, by: "eventData/hourWib", filter: "eventName eq 'Session started'", limit: 24 } },
+      { key: "weekdays", scope: "events", path: "aggregate", input: { since, until, by: "eventData/weekdayWib", filter: "eventName eq 'Session started'", limit: 7 } },
+      { key: "scrollDepth", scope: "events", path: "aggregate", input: { since, until, by: "eventData/maxScroll", filter: "eventName eq 'Session summary'", limit: 8 } },
+      { key: "engagedTime", scope: "events", path: "aggregate", input: { since, until, by: "eventData/engagedTime", filter: "eventName eq 'Session summary'", limit: 8 } },
+      { key: "exitSections", scope: "events", path: "aggregate", input: { since, until, by: "eventData/lastSection", filter: "eventName eq 'Session summary'", limit: 15 } },
+      { key: "sectionsSeen", scope: "events", path: "aggregate", input: { since, until, by: "eventData/sectionsSeen", filter: "eventName eq 'Session summary'", limit: 8 } },
+      { key: "pageSummaries", scope: "events", path: "aggregate", input: { since, until, by: "eventData/path", filter: "eventName eq 'Session summary'", limit: 15 } },
     ]);
 
-    const trend = normalizeRows(trendPayload, "day").sort(
+    if (optional.failures.length > 0) {
+      console.warn(JSON.stringify({
+        event: "ADMIN_ANALYTICS_PARTIAL_DATA",
+        failures: optional.failures,
+        timestamp: new Date().toISOString(),
+      }));
+    }
+
+    const trend = normalizeRows(optional.get("trend"), "day").sort(
       (left, right) => new Date(left.label).getTime() - new Date(right.label).getTime(),
     );
-    const pages = normalizeRows(pagesPayload, "requestPath");
+    const pages = normalizeRows(optional.get("pages"), "requestPath");
     const total = countMetrics(totalPayload);
-    const today = countMetrics(todayPayload);
-    const previous = countMetrics(previousPayload);
+    const today = countMetrics(optional.get("today"));
+    const previous = countMetrics(optional.get("previous"));
 
     const aggregateFallback = Math.max(sumPageViews(trend), sumPageViews(pages));
     const totalPageViews = total.pageViews > 0 ? total.pageViews : aggregateFallback;
@@ -457,26 +402,25 @@ export async function GET(request: Request) {
       total.visitors !== null && total.visitors > 0
         ? total.visitors
         : bestVisitorFallback(pages) ?? bestVisitorFallback(trend) ?? (totalPageViews === 0 ? 0 : null);
-    const todayPageViews = days === 1 && today.pageViews === 0 ? totalPageViews : today.pageViews;
-    const todayVisitors =
-      days === 1 && (today.visitors === null || today.visitors === 0) ? totalVisitors : today.visitors;
+    const todayPageViews = queryDays === 1 && today.pageViews === 0 ? totalPageViews : today.pageViews;
+    const todayVisitors = queryDays === 1 && (today.visitors === null || today.visitors === 0) ? totalVisitors : today.visitors;
 
-    const events = normalizeRows(eventsPayload, "eventName");
-    const ctaActions = normalizeRows(ctaActionsPayload, "eventData/action");
-    const supportActions = normalizeRows(supportActionsPayload, "eventData/action");
-    const actions = mergeRows(ctaActions, supportActions);
-    const checkoutSteps = normalizeRows(checkoutStepsPayload, "eventData/step");
+    const events = normalizeRows(optional.get("events"), "eventName");
+    const actions = mergeRows(
+      normalizeRows(optional.get("ctaActions"), "eventData/action"),
+      normalizeRows(optional.get("supportActions"), "eventData/action"),
+    );
+    const checkoutSteps = normalizeRows(optional.get("checkoutSteps"), "eventData/step");
 
     return NextResponse.json(
       {
-        range: { days, since, until, previousSince, previousUntil },
+        range: { days, queryDays, since, until, previousSince, previousUntil },
         summary: {
           pageViews: totalPageViews,
           visitors: totalVisitors,
           todayPageViews,
           todayVisitors,
-          viewsPerVisitor:
-            totalVisitors && totalVisitors > 0 ? Number((totalPageViews / totalVisitors).toFixed(2)) : null,
+          viewsPerVisitor: totalVisitors && totalVisitors > 0 ? Number((totalPageViews / totalVisitors).toFixed(2)) : null,
           previousPageViews: previous.pageViews,
           previousVisitors: previous.visitors,
           pageViewsChange: percentChange(totalPageViews, previous.pageViews),
@@ -484,52 +428,48 @@ export async function GET(request: Request) {
         },
         trend,
         pages,
-        referrers: normalizeRows(referrersPayload, "referrerHostname"),
-        devices: normalizeRows(devicesPayload, "deviceType"),
-        countries: normalizeRows(countriesPayload, "country"),
-        browsers: normalizeRows(browsersPayload, "browserName"),
-        operatingSystems: normalizeRows(osPayload, "osName"),
-        utmSources: normalizeRows(utmSourcesPayload, "utmSource"),
-        utmMediums: normalizeRows(utmMediumsPayload, "utmMedium"),
-        utmCampaigns: normalizeRows(utmCampaignsPayload, "utmCampaign"),
-        funnel: buildFunnel({
-          totalPageViews,
-          totalVisitors,
-          events,
-          actions,
-          checkoutSteps,
-        }),
+        referrers: normalizeRows(optional.get("referrers"), "referrerHostname"),
+        devices: normalizeRows(optional.get("devices"), "deviceType"),
+        countries: normalizeRows(optional.get("countries"), "country"),
+        browsers: normalizeRows(optional.get("browsers"), "browserName"),
+        operatingSystems: normalizeRows(optional.get("os"), "osName"),
+        utmSources: normalizeRows(optional.get("utmSources"), "utmSource"),
+        utmMediums: normalizeRows(optional.get("utmMediums"), "utmMedium"),
+        utmCampaigns: normalizeRows(optional.get("utmCampaigns"), "utmCampaign"),
+        funnel: buildFunnel({ totalPageViews, totalVisitors, events, actions, checkoutSteps }),
         behavior: {
           events,
-          sections: normalizeRows(sectionsPayload, "eventData/section"),
+          sections: normalizeRows(optional.get("sections"), "eventData/section"),
           actions,
           checkoutSteps,
         },
         sessions: {
-          landingPages: normalizeRows(landingPagesPayload, "eventData/landingPath"),
-          sourceTypes: normalizeRows(sourceTypesPayload, "eventData/sourceType"),
-          viewports: normalizeRows(viewportsPayload, "eventData/viewport"),
-          orientations: normalizeRows(orientationsPayload, "eventData/orientation"),
-          visitHours: normalizeRows(visitHoursPayload, "eventData/hourWib"),
-          weekdays: normalizeRows(weekdaysPayload, "eventData/weekdayWib"),
-          scrollDepth: normalizeRows(scrollDepthPayload, "eventData/maxScroll"),
-          engagedTime: normalizeRows(engagedTimePayload, "eventData/engagedTime"),
-          exitSections: normalizeRows(exitSectionsPayload, "eventData/lastSection"),
-          sectionsSeen: normalizeRows(sectionsSeenPayload, "eventData/sectionsSeen"),
-          pageSummaries: normalizeRows(pageSummariesPayload, "eventData/path"),
+          landingPages: normalizeRows(optional.get("landingPages"), "eventData/landingPath"),
+          sourceTypes: normalizeRows(optional.get("sourceTypes"), "eventData/sourceType"),
+          viewports: normalizeRows(optional.get("viewports"), "eventData/viewport"),
+          orientations: normalizeRows(optional.get("orientations"), "eventData/orientation"),
+          visitHours: normalizeRows(optional.get("visitHours"), "eventData/hourWib"),
+          weekdays: normalizeRows(optional.get("weekdays"), "eventData/weekdayWib"),
+          scrollDepth: normalizeRows(optional.get("scrollDepth"), "eventData/maxScroll"),
+          engagedTime: normalizeRows(optional.get("engagedTime"), "eventData/engagedTime"),
+          exitSections: normalizeRows(optional.get("exitSections"), "eventData/lastSection"),
+          sectionsSeen: normalizeRows(optional.get("sectionsSeen"), "eventData/sectionsSeen"),
+          pageSummaries: normalizeRows(optional.get("pageSummaries"), "eventData/path"),
+        },
+        availability: {
+          partial: optional.failures.length > 0,
+          failedDimensions: optional.failures.map((failure) => failure.key),
         },
         updatedAt: new Date().toISOString(),
       },
       { headers: { "Cache-Control": "no-store, max-age=0" } },
     );
   } catch (error) {
-    console.error(
-      JSON.stringify({
-        event: "ADMIN_ANALYTICS_FAILED",
-        message: error instanceof Error ? error.message : "UNKNOWN_ERROR",
-        timestamp: new Date().toISOString(),
-      }),
-    );
+    console.error(JSON.stringify({
+      event: "ADMIN_ANALYTICS_FAILED",
+      message: error instanceof Error ? error.message : "UNKNOWN_ERROR",
+      timestamp: new Date().toISOString(),
+    }));
     return NextResponse.json(
       {
         error: {
