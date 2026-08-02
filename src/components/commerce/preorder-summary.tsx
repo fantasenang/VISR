@@ -3,12 +3,11 @@ import { formatRupiah } from "@/lib/commerce/catalog";
 
 type PreorderSummaryProps = {
   price: number;
-  readyPrice: number;
   stock: number;
   forceOpen?: boolean;
 };
 
-export function PreorderSummary({ price, readyPrice, stock, forceOpen = false }: PreorderSummaryProps) {
+export function PreorderSummary({ price, stock, forceOpen = false }: PreorderSummaryProps) {
   return (
     <section id="preorder" className="border-y border-white/[0.07] bg-white/[0.018] py-16 md:py-24">
       <div className="visr-container">
@@ -20,7 +19,7 @@ export function PreorderSummary({ price, readyPrice, stock, forceOpen = false }:
           <div className="md:col-span-7 md:col-start-6">
             <div className="flex items-end gap-4">
               <p className="text-[clamp(2.5rem,5vw,4.8rem)] leading-none tracking-[-0.05em]">{formatRupiah(price)}</p>
-              <p className="pb-1 text-sm leading-5 text-white/38">preorder<br />{formatRupiah(readyPrice)} ready stock</p>
+              <p className="pb-1 text-sm leading-5 text-white/38">preorder</p>
             </div>
             <p className="mt-6 max-w-md text-sm leading-6 text-white/52">
               Includes 1× VISR Carry, 1× VISR Link, and 1× strap. {stock} units currently available for Batch 2.
