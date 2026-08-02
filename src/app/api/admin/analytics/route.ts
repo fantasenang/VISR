@@ -16,6 +16,11 @@ type AnalyticsRow = {
   visitors: number | null;
 };
 
+type FunnelRow = AnalyticsRow & {
+  rateFromVisitors: number | null;
+  rateFromPrevious: number | null;
+};
+
 type QueryScope = "visits" | "events";
 type QueryPath = "count" | "aggregate";
 
@@ -75,9 +80,7 @@ function readNumberDeep(value: unknown, candidates: string[], depth = 0): number
 }
 
 function pageViews(record: UnknownRecord | null) {
-  return (
-    readNumberDeep(record, ["pageviews", "pageViews", "page_views", "count", "visits", "value", "total"]) ?? 0
-  );
+  return readNumberDeep(record, ["pageviews", "pageViews", "page_views", "count", "visits", "value", "total"]) ?? 0;
 }
 
 function visitors(record: UnknownRecord | null) {
@@ -204,6 +207,58 @@ function percentChange(current: number | null, previous: number | null) {
   return Number((((current - previous) / previous) * 100).toFixed(1));
 }
 
+function conversionRate(value: number | null, base: number | null) {
+  if (value === null || base === null || base <= 0) return null;
+  return Number(((value / base) * 100).toFixed(1));
+}
+
+function findRow(rows: AnalyticsRow[], label: string) {
+  return rows.find((row) => row.label === label) ?? null;
+}
+
+function rowMetric(row: AnalyticsRow | null) {
+  if (!row) return 0;
+  return row.visitors ?? row.pageViews;
+}
+
+function buildFunnel(input: {
+  totalPageViews: number;
+  totalVisitors: number | null;
+  events: AnalyticsRow[];
+  actions: AnalyticsRow[];
+  checkoutSteps: AnalyticsRow[];
+}): FunnelRow[] {
+  const visitorBase = input.totalVisitors ?? input.totalPageViews;
+  const steps: Array<{ label: string; row: AnalyticsRow | null }> = [
+    {
+      label: "website_visitors",
+      row: {
+        label: "website_visitors",
+        pageViews: input.totalPageViews,
+        visitors: input.totalVisitors,
+      },
+    },
+    { label: "preorder_cta", row: findRow(input.actions, "preorder") },
+    { label: "checkout_viewed", row: findRow(input.events, "Checkout viewed") },
+    { label: "information", row: findRow(input.checkoutSteps, "information") },
+    { label: "payment", row: findRow(input.checkoutSteps, "payment") },
+  ];
+
+  let previousMetric = visitorBase;
+  return steps.map(({ label, row }, index) => {
+    const metric = index === 0 ? visitorBase : rowMetric(row);
+    const result: FunnelRow = {
+      label,
+      pageViews: row?.pageViews ?? (index === 0 ? input.totalPageViews : 0),
+      visitors: row?.visitors ?? (index === 0 ? input.totalVisitors : null),
+      rateFromVisitors: conversionRate(metric, visitorBase),
+      rateFromPrevious: index === 0 ? 100 : conversionRate(metric, previousMetric),
+    };
+    previousMetric = metric;
+    return result;
+  });
+}
+
 export async function GET(request: Request) {
   const session = await getAdminSession();
   if (!session) {
@@ -255,41 +310,52 @@ export async function GET(request: Request) {
       ctaActionsPayload,
       supportActionsPayload,
       checkoutStepsPayload,
+      landingPagesPayload,
+      sourceTypesPayload,
+      viewportsPayload,
+      orientationsPayload,
+      visitHoursPayload,
+      weekdaysPayload,
+      scrollDepthPayload,
+      engagedTimePayload,
+      exitSectionsPayload,
+      sectionsSeenPayload,
+      pageSummariesPayload,
     ] = await Promise.all([
       queryVercel(token, "visits", "count", { since, until }),
       optionalQuery(token, "visits", "count", { since: jakartaStartOfToday(), until }),
       optionalQuery(token, "visits", "count", { since: previousSince, until: previousUntil }),
       optionalQuery(token, "visits", "aggregate", { since, until, by: "day", limit: Math.min(days + 2, 92) }),
-      optionalQuery(token, "visits", "aggregate", { since, until, by: "requestPath", limit: 12 }),
-      optionalQuery(token, "visits", "aggregate", { since, until, by: "referrerHostname", limit: 12 }),
+      optionalQuery(token, "visits", "aggregate", { since, until, by: "requestPath", limit: 15 }),
+      optionalQuery(token, "visits", "aggregate", { since, until, by: "referrerHostname", limit: 15 }),
       optionalQuery(token, "visits", "aggregate", { since, until, by: "deviceType", limit: 10 }),
-      optionalQuery(token, "visits", "aggregate", { since, until, by: "country", limit: 12 }),
+      optionalQuery(token, "visits", "aggregate", { since, until, by: "country", limit: 15 }),
       optionalQuery(token, "visits", "aggregate", { since, until, by: "browserName", limit: 10 }),
       optionalQuery(token, "visits", "aggregate", { since, until, by: "osName", limit: 10 }),
-      optionalQuery(token, "visits", "aggregate", { since, until, by: "utmSource", limit: 12 }),
-      optionalQuery(token, "visits", "aggregate", { since, until, by: "utmMedium", limit: 12 }),
-      optionalQuery(token, "visits", "aggregate", { since, until, by: "utmCampaign", limit: 12 }),
-      optionalQuery(token, "events", "aggregate", { since, until, by: "eventName", limit: 20 }),
+      optionalQuery(token, "visits", "aggregate", { since, until, by: "utmSource", limit: 15 }),
+      optionalQuery(token, "visits", "aggregate", { since, until, by: "utmMedium", limit: 15 }),
+      optionalQuery(token, "visits", "aggregate", { since, until, by: "utmCampaign", limit: 15 }),
+      optionalQuery(token, "events", "aggregate", { since, until, by: "eventName", limit: 30 }),
       optionalQuery(token, "events", "aggregate", {
         since,
         until,
         by: "eventData/section",
         filter: "eventName eq 'Section viewed'",
-        limit: 12,
+        limit: 15,
       }),
       optionalQuery(token, "events", "aggregate", {
         since,
         until,
         by: "eventData/action",
         filter: "eventName eq 'CTA clicked'",
-        limit: 12,
+        limit: 15,
       }),
       optionalQuery(token, "events", "aggregate", {
         since,
         until,
         by: "eventData/action",
         filter: "eventName eq 'Support clicked'",
-        limit: 12,
+        limit: 15,
       }),
       optionalQuery(token, "events", "aggregate", {
         since,
@@ -297,6 +363,83 @@ export async function GET(request: Request) {
         by: "eventData/step",
         filter: "eventName eq 'Checkout step'",
         limit: 10,
+      }),
+      optionalQuery(token, "events", "aggregate", {
+        since,
+        until,
+        by: "eventData/landingPath",
+        filter: "eventName eq 'Session started'",
+        limit: 15,
+      }),
+      optionalQuery(token, "events", "aggregate", {
+        since,
+        until,
+        by: "eventData/sourceType",
+        filter: "eventName eq 'Session started'",
+        limit: 12,
+      }),
+      optionalQuery(token, "events", "aggregate", {
+        since,
+        until,
+        by: "eventData/viewport",
+        filter: "eventName eq 'Session started'",
+        limit: 10,
+      }),
+      optionalQuery(token, "events", "aggregate", {
+        since,
+        until,
+        by: "eventData/orientation",
+        filter: "eventName eq 'Session started'",
+        limit: 5,
+      }),
+      optionalQuery(token, "events", "aggregate", {
+        since,
+        until,
+        by: "eventData/hourWib",
+        filter: "eventName eq 'Session started'",
+        limit: 24,
+      }),
+      optionalQuery(token, "events", "aggregate", {
+        since,
+        until,
+        by: "eventData/weekdayWib",
+        filter: "eventName eq 'Session started'",
+        limit: 7,
+      }),
+      optionalQuery(token, "events", "aggregate", {
+        since,
+        until,
+        by: "eventData/maxScroll",
+        filter: "eventName eq 'Session summary'",
+        limit: 8,
+      }),
+      optionalQuery(token, "events", "aggregate", {
+        since,
+        until,
+        by: "eventData/engagedTime",
+        filter: "eventName eq 'Session summary'",
+        limit: 8,
+      }),
+      optionalQuery(token, "events", "aggregate", {
+        since,
+        until,
+        by: "eventData/lastSection",
+        filter: "eventName eq 'Session summary'",
+        limit: 15,
+      }),
+      optionalQuery(token, "events", "aggregate", {
+        since,
+        until,
+        by: "eventData/sectionsSeen",
+        filter: "eventName eq 'Session summary'",
+        limit: 8,
+      }),
+      optionalQuery(token, "events", "aggregate", {
+        since,
+        until,
+        by: "eventData/path",
+        filter: "eventName eq 'Session summary'",
+        limit: 15,
       }),
     ]);
 
@@ -317,6 +460,12 @@ export async function GET(request: Request) {
     const todayPageViews = days === 1 && today.pageViews === 0 ? totalPageViews : today.pageViews;
     const todayVisitors =
       days === 1 && (today.visitors === null || today.visitors === 0) ? totalVisitors : today.visitors;
+
+    const events = normalizeRows(eventsPayload, "eventName");
+    const ctaActions = normalizeRows(ctaActionsPayload, "eventData/action");
+    const supportActions = normalizeRows(supportActionsPayload, "eventData/action");
+    const actions = mergeRows(ctaActions, supportActions);
+    const checkoutSteps = normalizeRows(checkoutStepsPayload, "eventData/step");
 
     return NextResponse.json(
       {
@@ -343,14 +492,31 @@ export async function GET(request: Request) {
         utmSources: normalizeRows(utmSourcesPayload, "utmSource"),
         utmMediums: normalizeRows(utmMediumsPayload, "utmMedium"),
         utmCampaigns: normalizeRows(utmCampaignsPayload, "utmCampaign"),
+        funnel: buildFunnel({
+          totalPageViews,
+          totalVisitors,
+          events,
+          actions,
+          checkoutSteps,
+        }),
         behavior: {
-          events: normalizeRows(eventsPayload, "eventName"),
+          events,
           sections: normalizeRows(sectionsPayload, "eventData/section"),
-          actions: mergeRows(
-            normalizeRows(ctaActionsPayload, "eventData/action"),
-            normalizeRows(supportActionsPayload, "eventData/action"),
-          ),
-          checkoutSteps: normalizeRows(checkoutStepsPayload, "eventData/step"),
+          actions,
+          checkoutSteps,
+        },
+        sessions: {
+          landingPages: normalizeRows(landingPagesPayload, "eventData/landingPath"),
+          sourceTypes: normalizeRows(sourceTypesPayload, "eventData/sourceType"),
+          viewports: normalizeRows(viewportsPayload, "eventData/viewport"),
+          orientations: normalizeRows(orientationsPayload, "eventData/orientation"),
+          visitHours: normalizeRows(visitHoursPayload, "eventData/hourWib"),
+          weekdays: normalizeRows(weekdaysPayload, "eventData/weekdayWib"),
+          scrollDepth: normalizeRows(scrollDepthPayload, "eventData/maxScroll"),
+          engagedTime: normalizeRows(engagedTimePayload, "eventData/engagedTime"),
+          exitSections: normalizeRows(exitSectionsPayload, "eventData/lastSection"),
+          sectionsSeen: normalizeRows(sectionsSeenPayload, "eventData/sectionsSeen"),
+          pageSummaries: normalizeRows(pageSummariesPayload, "eventData/path"),
         },
         updatedAt: new Date().toISOString(),
       },
