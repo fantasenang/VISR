@@ -1,5 +1,5 @@
 import ControlClient from "./control-client";
-import { ADMIN_USERNAME, isOwnerConfigured } from "@/lib/admin/auth";
+import { ADMIN_USERNAME, getAdminSession, isOwnerConfigured } from "@/lib/admin/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -98,15 +98,18 @@ export default async function VisrControlPage({
 }) {
   const configured = await isOwnerConfigured();
   if (configured) {
+    const session = await getAdminSession();
     return (
       <>
         <ControlClient />
-        <a
-          href="/visr-control/analytics"
-          className="fixed bottom-5 right-5 z-50 rounded-full border border-white/15 bg-black/80 px-5 py-3 text-sm text-white/70 shadow-2xl backdrop-blur-xl transition hover:bg-white hover:text-black"
-        >
-          Website Analytics
-        </a>
+        {session ? (
+          <a
+            href="/visr-control/analytics"
+            className="fixed bottom-5 right-5 z-50 rounded-full border border-white/15 bg-black/80 px-5 py-3 text-sm text-white/70 shadow-2xl backdrop-blur-xl transition hover:bg-white hover:text-black"
+          >
+            Website Analytics
+          </a>
+        ) : null}
       </>
     );
   }
