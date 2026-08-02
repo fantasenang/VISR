@@ -1,6 +1,8 @@
 import { formatRupiah } from "@/lib/commerce/catalog";
 import { getPackingProfile } from "./packing";
 
+export const SHIPPING_DISCOUNT_CAP_IDR = 20_000;
+
 export type CheckoutCourier = "jne" | "jnt";
 
 export type ShippingDestination = {
@@ -22,6 +24,19 @@ export type ShippingRate = {
   costIdr: number;
   etd?: string;
 };
+
+export function calculateShippingDiscount(quotedCostIdr: number) {
+  const normalizedCostIdr = Number.isFinite(quotedCostIdr)
+    ? Math.max(0, Math.round(quotedCostIdr))
+    : 0;
+  const discountIdr = Math.min(normalizedCostIdr, SHIPPING_DISCOUNT_CAP_IDR);
+
+  return {
+    quotedCostIdr: normalizedCostIdr,
+    discountIdr,
+    payableCostIdr: normalizedCostIdr - discountIdr,
+  };
+}
 
 export function calculatePacking(input: {
   carryQty: number;
