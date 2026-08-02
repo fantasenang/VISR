@@ -5,6 +5,7 @@ import CheckoutPolish from "./checkout-polish";
 import PreorderGate from "./preorder-gate";
 import { getLiveCatalog } from "@/lib/commerce/catalog-server";
 import { isPreorderPreviewOverride } from "@/lib/commerce/preorder-server";
+import { formatRupiah, SHIPPING_DISCOUNT_CAP_IDR } from "@/lib/shipping";
 
 export const metadata: Metadata = {
   title: "Reserve Your VISR — Batch 2",
@@ -58,6 +59,14 @@ export default async function CheckoutPage() {
   return (
     <MobileOnlyPage>
       <PreorderGate forceOpen={previewOpen}>
+        <div className="border-b border-white/[0.07] bg-[#050505] px-6 pt-8 text-white md:px-12">
+          <div className="mx-auto max-w-7xl rounded-2xl border border-white/10 bg-white/[0.035] px-5 py-4">
+            <p className="text-[10px] uppercase tracking-[0.17em] text-white/38">Automatic shipping support</p>
+            <p className="mt-2 text-sm leading-6 text-white/68">
+              VISR covers up to {formatRupiah(SHIPPING_DISCOUNT_CAP_IDR)} of domestic shipping on every checkout. Shipping below the limit becomes free; only the remaining amount is charged.
+            </p>
+          </div>
+        </div>
         <CheckoutClient products={checkoutProducts} />
         <CheckoutPolish />
       </PreorderGate>
