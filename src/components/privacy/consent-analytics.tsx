@@ -7,6 +7,7 @@ import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const HOME_SECTIONS = [
+  { selector: "#opening", section: "opening" },
   { selector: "#preorder", section: "preorder" },
   { selector: "#link-system", section: "visr_link" },
   { selector: "#carry", section: "visr_carry" },
@@ -16,7 +17,9 @@ const HOME_SECTIONS = [
   { selector: "#faq", section: "faq" },
 ] as const;
 
-function safeTrack(name: string, data?: Record<string, string | number | boolean>) {
+type EventData = Record<string, string | number | boolean>;
+
+function safeTrack(name: string, data?: EventData) {
   try {
     track(name, data);
   } catch {
@@ -24,7 +27,7 @@ function safeTrack(name: string, data?: Record<string, string | number | boolean
   }
 }
 
-function trackOnce(key: string, name: string, data?: Record<string, string | number | boolean>) {
+function trackOnce(key: string, name: string, data?: EventData) {
   try {
     const storageKey = `visr-analytics:${key}`;
     if (window.sessionStorage.getItem(storageKey) === "1") return;
@@ -41,6 +44,61 @@ function elementLocation(element: Element) {
   if (element.closest("footer")) return "footer";
   if (element.closest("header")) return "header";
   return "global";
+}
+
+function viewportBucket() {
+  const width = window.innerWidth;
+  if (width <= 374) return "small_mobile";
+  if (width <= 430) return "mobile";
+  if (width <= 767) return "large_mobile";
+  if (width <= 1024) return "tablet";
+  return "desktop";
+}
+
+function trafficSourceType() {
+  const referrer = document.referrer.trim().toLowerCase();
+  if (!referrer) return "direct";
+  if (referrer.includes(window.location.hostname.toLowerCase())) return "internal";
+  if (referrer.includes("instagram")) return "instagram";
+  if (referrer.includes("facebook") || referrer.includes("fb.com")) return "facebook";
+  if (referrer.includes("google")) return "google";
+  if (referrer.includes("t.co") || referrer.includes("twitter") || referrer.includes("x.com")) return "x_twitter";
+  return "other_referral";
+}
+
+function wibContext() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Jakarta",
+    hour: "2-digit",
+    hourCycle: "h23",
+    weekday: "long",
+  }).formatToParts(new Date());
+  const hour = parts.find((part) => part.type === "hour")?.value ?? "00";
+  const weekday = parts.find((part) => part.type === "weekday")?.value.toLowerCase() ?? "unknown";
+  return { hourWib: `wib_${hour}`, weekdayWib: weekday };
+}
+
+function scrollBucket(percent: number) {
+  if (percent < 25) return "scroll_0_24";
+  if (percent < 50) return "scroll_25_49";
+  if (percent < 75) return "scroll_50_74";
+  if (percent < 90) return "scroll_75_89";
+  return "scroll_90_100";
+}
+
+function engagedTimeBucket(seconds: number) {
+  if (seconds < 15) return "time_under_15s";
+  if (seconds < 45) return "time_15_44s";
+  if (seconds < 90) return "time_45_89s";
+  if (seconds < 180) return "time_90_179s";
+  return "time_180s_plus";
+}
+
+function sectionsSeenBucket(count: number) {
+  if (count <= 1) return "sections_one";
+  if (count <= 3) return "sections_two_three";
+  if (count <= 5) return "sections_four_five";
+  return "sections_six_plus";
 }
 
 function setupHomeSectionTracking() {
@@ -77,6 +135,93 @@ function setupHomeSectionTracking() {
   return () => {
     mutationObserver.disconnect();
     observer.disconnect();
+  };
+}
+
+function setupSessionSummary(pathname: string) {
+  const viewport = viewportBucket();
+  const orientation = window.matchMedia("(orientation: landscape)").matches ? "landscape" : "portrait";
+  const wib = wibContext();
+  let activeSeconds = 0;
+  let maxScrollPercent = 0;
+  let lastSection = pathname === "/" ? "opening" : pathname.replace(/^\//, "") || "homepage";
+  let sent = false;
+  const sectionsSeen = new Set<string>();
+  const observedSections = new Set<Element>();
+
+  trackOnce("session:start", "Session started", {
+    landingPath: pathname,
+    sourceType: trafficSourceType(),
+    viewport,
+    orientation,
+    hourWib: wib.hourWib,
+    weekdayWib: wib.weekdayWib,
+  });
+
+  const updateScroll = () => {
+    const available = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+    const percent = available === 0 ? 100 : Math.min(100, Math.round((window.scrollY / available) * 100));
+    maxScrollPercent = Math.max(maxScrollPercent, percent);
+  };
+
+  const sectionObserver = new IntersectionObserver(
+    (entries) => {
+      const visible = entries
+        .filter((entry) => entry.isIntersecting)
+        .sort((left, right) => right.intersectionRatio - left.intersectionRatio)[0];
+      if (!(visible?.target instanceof HTMLElement)) return;
+      const section = visible.target.id || "unknown";
+      lastSection = section;
+      sectionsSeen.add(section);
+    },
+    { threshold: [0.25, 0.5, 0.7] },
+  );
+
+  const attachSections = () => {
+    for (const section of document.querySelectorAll("section[id]")) {
+      if (observedSections.has(section)) continue;
+      observedSections.add(section);
+      sectionObserver.observe(section);
+    }
+  };
+
+  updateScroll();
+  attachSections();
+  window.addEventListener("scroll", updateScroll, { passive: true });
+  window.addEventListener("resize", updateScroll, { passive: true });
+
+  const mutationObserver = new MutationObserver(attachSections);
+  mutationObserver.observe(document.body, { childList: true, subtree: true });
+
+  const activeTimer = window.setInterval(() => {
+    if (document.visibilityState === "visible") activeSeconds += 1;
+  }, 1000);
+
+  const sendSummary = () => {
+    if (sent) return;
+    sent = true;
+    updateScroll();
+    safeTrack("Session summary", {
+      path: pathname,
+      maxScroll: scrollBucket(maxScrollPercent),
+      engagedTime: engagedTimeBucket(activeSeconds),
+      lastSection,
+      sectionsSeen: sectionsSeenBucket(sectionsSeen.size),
+      viewport,
+      orientation,
+    });
+  };
+
+  window.addEventListener("pagehide", sendSummary);
+
+  return () => {
+    sendSummary();
+    window.clearInterval(activeTimer);
+    window.removeEventListener("scroll", updateScroll);
+    window.removeEventListener("resize", updateScroll);
+    window.removeEventListener("pagehide", sendSummary);
+    mutationObserver.disconnect();
+    sectionObserver.disconnect();
   };
 }
 
@@ -153,10 +298,12 @@ function VisrBehaviorTracking() {
     }
 
     const cleanupSections = pathname === "/" ? setupHomeSectionTracking() : undefined;
+    const cleanupSession = setupSessionSummary(pathname);
     const cleanupInteractions = setupInteractionTracking(pathname);
 
     return () => {
       cleanupSections?.();
+      cleanupSession();
       cleanupInteractions();
     };
   }, [pathname]);
