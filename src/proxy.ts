@@ -1,5 +1,4 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getServerPreorderPhase } from "@/lib/commerce/preorder-server";
 
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9._:-]{8,128}$/;
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -173,14 +172,6 @@ export function proxy(request: NextRequest) {
       fetchSite: request.headers.get("sec-fetch-site"),
     });
     return apiError(requestId, "INVALID_ORIGIN", "This request origin is not allowed.", 403);
-  }
-
-  if (request.method === "POST" && request.nextUrl.pathname === "/api/orders") {
-    const preorderPhase = getServerPreorderPhase();
-    if (preorderPhase !== "open") {
-      const code = preorderPhase === "upcoming" ? "PREORDER_NOT_OPEN" : "PREORDER_CLOSED";
-      return apiError(requestId, code, preorderPhase === "upcoming" ? "Preorder is not open yet." : "Preorder is closed.", 403);
-    }
   }
 
   const policy = resolveRateLimitPolicy(request.nextUrl.pathname, request.method);
