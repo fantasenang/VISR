@@ -60,6 +60,40 @@ async function patchRows(
   }
 }
 
+async function upsertShipment(
+  input: PersistenceInput,
+  updatedAt: string,
+) {
+  const response = await fetch(
+    `${input.supabaseUrl}/rest/v1/shipments?on_conflict=order_id`,
+    {
+      method: "POST",
+      headers: {
+        ...input.headers,
+        Prefer: "resolution=merge-duplicates,return=representation",
+      },
+      body: JSON.stringify({
+        order_id: input.orderId,
+        courier: input.courier.trim().toUpperCase(),
+        service: input.service.trim().toUpperCase(),
+        shipping_cost_idr: 0,
+        updated_at: updatedAt,
+      }),
+      cache: "no-store",
+    },
+  );
+
+  if (!response.ok) {
+    const failure = await readFailure(response);
+    throw new Error(`SHIPMENTS_UPSERT_FAILED:${JSON.stringify(failure)}`);
+  }
+
+  const rows = await response.json().catch(() => []) as unknown[];
+  if (!Array.isArray(rows) || rows.length === 0) {
+    throw new Error("SHIPMENTS_UPSERT_EMPTY");
+  }
+}
+
 export async function rollbackPendingOrder(
   supabaseUrl: string,
   headers: SupabaseHeaders,
@@ -133,18 +167,7 @@ export async function persistFreeShipping(
     },
   );
 
-  await patchRows(
-    input.supabaseUrl,
-    input.headers,
-    "shipments",
-    `order_id=eq.${encodeURIComponent(input.orderId)}`,
-    {
-      courier: input.courier.trim().toUpperCase(),
-      service: input.service.trim().toUpperCase(),
-      shipping_cost_idr: 0,
-      updated_at: updatedAt,
-    },
-  );
+  await upsertShipment(input, updatedAt);
 
   return {
     shipping_cost_idr: 0,
