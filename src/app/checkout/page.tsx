@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { MobileOnlyPage } from "@/components/layout/mobile-only-page";
 import CheckoutClient from "./checkout-client";
 import CheckoutPolish from "./checkout-polish";
+import PaymentReturnNotice from "./payment-return-notice";
 import PreorderGate from "./preorder-gate";
 import { getLiveCatalog } from "@/lib/commerce/catalog-server";
 import { isPreorderPreviewOverride } from "@/lib/commerce/preorder-server";
@@ -58,6 +59,7 @@ export default async function CheckoutPage() {
 
   return (
     <MobileOnlyPage>
+      <PaymentReturnNotice />
       <PreorderGate forceOpen={previewOpen}>
         <div className="border-b border-white/[0.08] bg-[#050505] px-6 pt-8 text-white md:px-12">
           <div className="mx-auto max-w-7xl overflow-hidden rounded-[1.75rem] border border-white/15 bg-white/[0.055]">
