@@ -42,7 +42,7 @@ export const shippingSelectionSchema = z.object({
   destinationLabel: plainText(3, 200),
   courier: z.enum(["jne", "jnt"]),
   service: z.string().trim().min(1).max(40).regex(/^[A-Z0-9_-]+$/, "Invalid courier service"),
-  quotedCostIdr: z.coerce.number().int().positive().max(5_000_000),
+  quotedCostIdr: z.coerce.number().int().min(0).max(5_000_000),
 });
 
 export const reservationSchema = z
