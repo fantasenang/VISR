@@ -23,8 +23,11 @@ export type PaymentReceipt = {
   items: ReceiptItem[];
 };
 
-const PAGE_WIDTH = 595;
-const PAGE_HEIGHT = 842;
+// ISO A6 portrait: 105 × 148 mm.
+const PAGE_WIDTH = 298;
+const PAGE_HEIGHT = 420;
+const LEFT = 22;
+const RIGHT = PAGE_WIDTH - 22;
 
 function safePdfText(value: string) {
   return value
@@ -45,7 +48,7 @@ function formatRupiah(value: number) {
 
 function formatPaidAt(value: string) {
   return `${new Intl.DateTimeFormat("en-ID", {
-    dateStyle: "long",
+    dateStyle: "medium",
     timeStyle: "short",
     timeZone: "Asia/Jakarta",
   }).format(new Date(value))} WIB`;
@@ -72,87 +75,56 @@ export function buildPaymentReceiptPdf(receipt: PaymentReceipt) {
   };
 
   const line = (
-    x1: number,
-    y1: number,
-    x2: number,
-    y2: number,
-    width = 0.7,
-    gray = 0.85,
-  ) => commands.push(`${gray} G ${width} w ${x1} ${y1} m ${x2} ${y2} l S`);
+    y: number,
+    width = 0.5,
+    gray = 0.82,
+  ) => commands.push(`${gray} G ${width} w ${LEFT} ${y} m ${RIGHT} ${y} l S`);
 
   commands.push(`1 1 1 rg 0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT} re f`);
-  commands.push(`0 0 0 rg 0 770 ${PAGE_WIDTH} 72 re f`);
+  commands.push(`0 0 0 rg 0 372 ${PAGE_WIDTH} 48 re f`);
 
-  text(48, 795, 28, "VISR", "F2", 1);
-  text(48, 744, 11, "PAYMENT RECEIPT", "F2");
-  text(48, 723, 9, "Payment verified - thank you for collecting VISR.", "F1", 0.35);
-  text(410, 744, 9, "STATUS", "F2", 0.35);
-  text(410, 723, 12, "PAID", "F2");
-  line(48, 700, 547, 700);
+  text(LEFT, 390, 19, "VISR", "F2", 1);
+  text(LEFT, 351, 8, "ORDER SUMMARY", "F2");
+  text(LEFT, 337, 7, truncate(receipt.orderNumber, 38), "F2", 0.12);
+  text(220, 351, 7, "PAID", "F2", 0.18);
+  line(322);
 
-  text(48, 676, 8, "ORDER NUMBER", "F2", 0.4);
-  text(48, 658, 11, receipt.orderNumber, "F2");
-  text(330, 676, 8, "PAID AT", "F2", 0.4);
-  text(330, 658, 10, formatPaidAt(receipt.paidAt));
+  text(LEFT, 307, 6, "CUSTOMER", "F2", 0.42);
+  text(LEFT, 294, 8, truncate(receipt.customerName, 38), "F2");
+  text(LEFT, 281, 7, truncate(receipt.email || receipt.whatsapp, 44), "F1", 0.28);
+  text(LEFT, 268, 7, truncate(`${receipt.city}, ${receipt.province} ${receipt.postalCode}`, 44), "F1", 0.28);
 
-  text(48, 626, 8, "BILLED TO", "F2", 0.4);
-  text(48, 608, 11, truncate(receipt.customerName, 55), "F2");
-  text(48, 592, 9, truncate(receipt.email, 70));
-  text(48, 577, 9, truncate(receipt.whatsapp, 30));
-  text(48, 557, 9, truncate(receipt.address, 82), "F1", 0.25);
-  text(
-    48,
-    542,
-    9,
-    truncate(`${receipt.city}, ${receipt.province} ${receipt.postalCode}`, 82),
-    "F1",
-    0.25,
-  );
+  text(170, 307, 6, "PAID AT", "F2", 0.42);
+  text(170, 294, 7, truncate(formatPaidAt(receipt.paidAt), 27));
+  line(250);
 
-  line(48, 520, 547, 520);
-  text(48, 498, 8, "ITEM", "F2", 0.4);
-  text(360, 498, 8, "QTY", "F2", 0.4);
-  text(430, 498, 8, "AMOUNT", "F2", 0.4);
-  line(48, 486, 547, 486);
+  text(LEFT, 236, 6, "ITEM", "F2", 0.42);
+  text(220, 236, 6, "AMOUNT", "F2", 0.42);
+  line(228);
 
-  let y = 462;
-  for (const item of receipt.items.slice(0, 10)) {
+  let y = 213;
+  for (const item of receipt.items.slice(0, 6)) {
     const itemName = item.variant ? `${item.name} - ${item.variant}` : item.name;
-    text(48, y, 9, truncate(itemName, 50));
-    text(370, y, 9, String(item.quantity));
-    text(430, y, 9, formatRupiah(item.lineTotalIdr));
-    y -= 24;
+    text(LEFT, y, 7, truncate(`${itemName} x${item.quantity}`, 35));
+    text(220, y, 7, formatRupiah(item.lineTotalIdr));
+    y -= 18;
   }
 
-  line(48, y + 8, 547, y + 8);
+  line(y + 6);
+  y -= 10;
+  text(150, y, 7, "Subtotal", "F1", 0.35);
+  text(220, y, 7, formatRupiah(receipt.subtotalIdr));
+  y -= 16;
+  text(150, y, 7, "Shipping", "F1", 0.35);
+  text(220, y, 7, formatRupiah(receipt.shippingCostIdr));
   y -= 18;
-  text(330, y, 9, "Subtotal", "F1", 0.35);
-  text(430, y, 9, formatRupiah(receipt.subtotalIdr));
-  y -= 22;
-  text(330, y, 9, "Shipping paid", "F1", 0.35);
-  text(430, y, 9, formatRupiah(receipt.shippingCostIdr));
-  y -= 22;
-  line(330, y + 10, 547, y + 10);
-  text(330, y - 8, 11, "TOTAL PAID", "F2");
-  text(430, y - 8, 12, formatRupiah(receipt.totalIdr), "F2");
+  line(y + 8, 0.7, 0.2);
+  text(150, y - 5, 8, "TOTAL", "F2");
+  text(220, y - 5, 9, formatRupiah(receipt.totalIdr), "F2");
 
-  text(48, 116, 8, "Receipt issued by VISR - Bandung, Indonesia", "F1", 0.45);
-  text(
-    48,
-    100,
-    8,
-    "This document confirms payment for the order above. It is not a tax invoice.",
-    "F1",
-    0.45,
-  );
-  text(
-    48,
-    72,
-    8,
-    `Generated ${new Date().toISOString().slice(0, 10)} | visr.works`,
-    "F1",
-    0.6,
-  );
+  text(LEFT, 48, 7, "Thank you.", "F2", 0.18);
+  text(LEFT, 35, 7, "Engineered to Display.", "F1", 0.42);
+  text(LEFT, 20, 5.5, "Payment receipt - not a tax invoice | visr.works", "F1", 0.58);
 
   const stream = commands.join("\n");
   const objects = [
