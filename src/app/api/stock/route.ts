@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { reconcileInventoryCounters } from "@/lib/commerce/inventory-reconciliation";
 
 const TRACKED_SKUS = [
   "VISR-CARRY-G2",
@@ -23,6 +24,16 @@ export async function GET() {
 
   if (!supabaseUrl || !serviceRoleKey) {
     return NextResponse.json({ error: "COMMERCE_NOT_CONFIGURED" }, { status: 503 });
+  }
+
+  try {
+    await reconcileInventoryCounters({ minimumIntervalMs: 30_000 });
+  } catch (error) {
+    console.warn(JSON.stringify({
+      event: "PUBLIC_STOCK_RECONCILIATION_SKIPPED",
+      message: error instanceof Error ? error.message : "UNKNOWN_ERROR",
+      timestamp: new Date().toISOString(),
+    }));
   }
 
   const query = new URLSearchParams({
