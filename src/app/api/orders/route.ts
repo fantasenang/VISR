@@ -4,6 +4,10 @@ import { reservationSchema } from "@/lib/commerce/order-schema";
 import { haloVariants, products } from "@/lib/commerce/catalog";
 import { getPreorderApiAccess } from "@/lib/commerce/preorder-server";
 import {
+  persistFreeShipping,
+  rollbackPendingOrder,
+} from "@/lib/commerce/free-shipping-persistence";
+import {
   notesWithTrackingConsent,
   readTrackingConsentFromCookieHeader,
 } from "@/lib/privacy/consent";
@@ -142,32 +146,80 @@ async function createReservation(
     }
 
     const shippingStartedAt = performance.now();
-    const shippingResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/apply_visr_shipping`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        p_order_id: reservation.order_id,
-        p_courier: selectedCourier,
-        p_service: liveRate.service,
-        p_shipping_cost_idr: liveRate.costIdr,
-        p_actual_weight_grams: profile.actualWeightGrams,
-        p_box_count: 1,
-        p_length_cm: profile.lengthCm,
-        p_width_cm: profile.widthCm,
-        p_height_cm: profile.heightCm,
-      }),
-      cache: "no-store",
-    });
-    const shippingPersistenceDurationMs = elapsedMs(shippingStartedAt);
+    let shipping: ShippingResult | null = null;
 
-    if (!shippingResponse.ok) {
-      logger.error("ORDER_SHIPPING_PERSISTENCE_FAILED", { requestId, orderId: reservation.order_id, orderNumber: reservation.order_number, databaseStatus: shippingResponse.status, shippingPersistenceDurationMs, durationMs: elapsedMs(startedAt) });
+    try {
+      if (liveRate.costIdr === 0) {
+        shipping = await persistFreeShipping({
+          supabaseUrl,
+          headers,
+          orderId: reservation.order_id,
+          courier: selectedCourier,
+          service: liveRate.service,
+          actualWeightGrams: profile.actualWeightGrams,
+          boxCount: 1,
+          lengthCm: profile.lengthCm,
+          widthCm: profile.widthCm,
+          heightCm: profile.heightCm,
+        });
+      } else {
+        const shippingResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/apply_visr_shipping`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            p_order_id: reservation.order_id,
+            p_courier: selectedCourier,
+            p_service: liveRate.service,
+            p_shipping_cost_idr: liveRate.costIdr,
+            p_actual_weight_grams: profile.actualWeightGrams,
+            p_box_count: 1,
+            p_length_cm: profile.lengthCm,
+            p_width_cm: profile.widthCm,
+            p_height_cm: profile.heightCm,
+          }),
+          cache: "no-store",
+        });
+
+        if (!shippingResponse.ok) {
+          const databaseFailure = await shippingResponse.json().catch(() => ({})) as Record<string, unknown>;
+          throw new Error(`SHIPPING_RPC_FAILED:${shippingResponse.status}:${JSON.stringify(databaseFailure)}`);
+        }
+
+        const shippingPayload = (await shippingResponse.json()) as ShippingResult[] | ShippingResult;
+        shipping = Array.isArray(shippingPayload) ? shippingPayload[0] : shippingPayload;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "SHIPPING_PERSISTENCE_FAILED";
+      try {
+        await rollbackPendingOrder(supabaseUrl, headers, reservation.order_id);
+      } catch (rollbackError) {
+        logger.error("ORDER_SHIPPING_ROLLBACK_FAILED", {
+          requestId,
+          orderId: reservation.order_id,
+          orderNumber: reservation.order_number,
+          message: rollbackError instanceof Error ? rollbackError.message : "ORDER_ROLLBACK_FAILED",
+        });
+      }
+
+      logger.error("ORDER_SHIPPING_PERSISTENCE_FAILED", {
+        requestId,
+        orderId: reservation.order_id,
+        orderNumber: reservation.order_number,
+        shippingCostIdr: liveRate.costIdr,
+        message,
+        shippingPersistenceDurationMs: elapsedMs(shippingStartedAt),
+        durationMs: elapsedMs(startedAt),
+      });
       return { status: 502, body: failure("SHIPPING_PERSISTENCE_FAILED", "Shipping details could not be saved.") };
     }
 
-    const shippingPayload = (await shippingResponse.json()) as ShippingResult[] | ShippingResult;
-    const shipping = Array.isArray(shippingPayload) ? shippingPayload[0] : shippingPayload;
+    const shippingPersistenceDurationMs = elapsedMs(shippingStartedAt);
     if (!shipping) {
+      try {
+        await rollbackPendingOrder(supabaseUrl, headers, reservation.order_id);
+      } catch {
+        // The primary failure is logged below. Expired reservations are also released by cron.
+      }
       logger.error("ORDER_INVALID_SHIPPING_RESPONSE", { requestId, orderId: reservation.order_id, orderNumber: reservation.order_number, durationMs: elapsedMs(startedAt) });
       return { status: 502, body: failure("INVALID_SHIPPING_RESPONSE", "The shipping service returned an invalid response.") };
     }
