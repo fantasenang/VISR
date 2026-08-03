@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ADMIN_CANCEL_MARKER } from "@/lib/admin/order-actions";
+import { applyPaymentStateFallback } from "@/lib/commerce/payment-state-fallback";
 import { sendMetaPurchaseEvent } from "@/lib/marketing/meta-conversions";
 import { elapsedMs, logger, requestIdFrom } from "@/lib/observability/logger";
 import { apiError, readJsonBody } from "@/lib/http/api";
@@ -189,7 +190,7 @@ export async function POST(request: Request) {
   }
 
   const serverKey = process.env.MIDTRANS_SERVER_KEY;
-  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseUrl = process.env.SUPABASE_URL?.replace(/\/$/, "");
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const isProduction = process.env.MIDTRANS_IS_PRODUCTION === "true";
 
@@ -240,8 +241,7 @@ export async function POST(request: Request) {
     return apiError(requestId, "ORDER_LOOKUP_FAILED", "The order could not be verified.", 502);
   }
 
-  const orders = (await orderResponse.json()) as OrderRow[];
-  const order = orders[0];
+  const order = ((await orderResponse.json()) as OrderRow[])[0];
   if (!order) {
     logger.warn("MIDTRANS_WEBHOOK_ORDER_NOT_FOUND", { requestId, orderNumber: payload.order_id, orderLookupDurationMs, durationMs: elapsedMs(startedAt) });
     return apiError(requestId, "ORDER_NOT_FOUND", "The referenced order does not exist.", 404);
@@ -320,8 +320,30 @@ export async function POST(request: Request) {
   }
 
   const normalizedStatus = normalizePaymentStatus(transactionStatus, fraudStatus);
+
+  if (order.payment_status === "paid" && normalizedStatus !== "paid") {
+    logger.info("MIDTRANS_WEBHOOK_IGNORED_STALE_STATUS", {
+      requestId,
+      orderId: order.id,
+      orderNumber: order.order_number,
+      currentStatus: order.payment_status,
+      providerStatus: transactionStatus,
+      normalizedStatus,
+      durationMs: elapsedMs(startedAt),
+    });
+    return NextResponse.json(
+      { received: true, ignored: true, requestId },
+      { headers: { "x-request-id": requestId, "Cache-Control": "no-store, max-age=0" } },
+    );
+  }
+
+  const rawPayload = {
+    notification: payload,
+    verified_status: verifiedStatus,
+    verification_source: verifiedStatus ? "status_api" : "signed_notification",
+  };
   const updateStartedAt = performance.now();
-  const response = await fetch(`${supabaseUrl}/rest/v1/rpc/apply_midtrans_notification`, {
+  const rpcResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/apply_midtrans_notification`, {
     method: "POST",
     headers: { ...databaseHeaders, "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -329,33 +351,55 @@ export async function POST(request: Request) {
       p_payment_status: normalizedStatus,
       p_provider_transaction_id: transactionId,
       p_provider_status: transactionStatus,
-      p_raw_payload: {
-        notification: payload,
-        verified_status: verifiedStatus,
-        verification_source: verifiedStatus ? "status_api" : "signed_notification",
-      },
+      p_raw_payload: rawPayload,
     }),
     cache: "no-store",
   });
-  const databaseUpdateDurationMs = elapsedMs(updateStartedAt);
 
-  if (!response.ok) {
-    const databaseFailure = await response.json().catch(() => ({})) as Record<string, unknown>;
-    logger.error("MIDTRANS_WEBHOOK_UPDATE_FAILED", {
+  let fallbackApplied = false;
+  if (!rpcResponse.ok) {
+    const databaseFailure = await rpcResponse.json().catch(() => ({})) as Record<string, unknown>;
+    logger.warn("MIDTRANS_WEBHOOK_RPC_FAILED_USING_FALLBACK", {
       requestId,
       orderNumber: order.order_number,
       transactionId,
       providerStatus: transactionStatus,
       normalizedStatus,
-      databaseStatus: response.status,
+      databaseStatus: rpcResponse.status,
       databaseCode: databaseFailure.code ?? null,
       databaseMessage: databaseFailure.message ?? null,
-      databaseUpdateDurationMs,
-      durationMs: elapsedMs(startedAt),
     });
-    return apiError(requestId, "PAYMENT_UPDATE_FAILED", "The payment status could not be applied.", 502);
+
+    try {
+      await applyPaymentStateFallback({
+        supabaseUrl,
+        serviceRoleKey,
+        orderNumber: order.order_number,
+        paymentStatus: normalizedStatus,
+        providerTransactionId: transactionId,
+        providerStatus: transactionStatus,
+        rawPayload,
+      });
+      fallbackApplied = true;
+    } catch (fallbackError) {
+      logger.error("MIDTRANS_WEBHOOK_UPDATE_FAILED", {
+        requestId,
+        orderNumber: order.order_number,
+        transactionId,
+        providerStatus: transactionStatus,
+        normalizedStatus,
+        databaseStatus: rpcResponse.status,
+        databaseCode: databaseFailure.code ?? null,
+        databaseMessage: databaseFailure.message ?? null,
+        fallbackMessage: fallbackError instanceof Error ? fallbackError.message : "UNKNOWN_ERROR",
+        databaseUpdateDurationMs: elapsedMs(updateStartedAt),
+        durationMs: elapsedMs(startedAt),
+      });
+      return apiError(requestId, "PAYMENT_UPDATE_FAILED", "The payment status could not be applied.", 502);
+    }
   }
 
+  const databaseUpdateDurationMs = elapsedMs(updateStartedAt);
   await reportPaidOrderToMeta({
     order,
     normalizedStatus,
@@ -375,6 +419,7 @@ export async function POST(request: Request) {
     providerStatus: transactionStatus,
     normalizedStatus,
     duplicate,
+    fallbackApplied,
     verificationSource: verifiedStatus ? "status_api" : "signed_notification",
     orderLookupDurationMs,
     verificationDurationMs,
