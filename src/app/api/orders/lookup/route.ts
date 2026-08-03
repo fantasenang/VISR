@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { applyPaymentStateFallback } from "@/lib/commerce/payment-state-fallback";
 import { elapsedMs, logger, requestIdFrom } from "@/lib/observability/logger";
 
 type LookupRequest = { orderNumber?: unknown; contact?: unknown };
@@ -35,13 +36,28 @@ async function reconcilePendingOrder(order: OrderRow, supabaseUrl: string, servi
     }
     const paymentStatus = normalizedPaymentStatus(status.transaction_status, status.fraud_status);
     if (paymentStatus === "pending") return order;
+    const rawPayload = { source: "order_lookup_reconciliation", verified_status: status };
     const applyStartedAt = performance.now();
-    const applyResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/apply_midtrans_notification`, { method: "POST", headers: { ...supabaseHeaders(serviceRoleKey), "Content-Type": "application/json" }, body: JSON.stringify({ p_order_number: order.order_number, p_payment_status: paymentStatus, p_provider_transaction_id: status.transaction_id ?? null, p_provider_status: status.transaction_status, p_raw_payload: { source: "order_lookup_reconciliation", verified_status: status } }), cache: "no-store" });
+    const applyResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/apply_midtrans_notification`, { method: "POST", headers: { ...supabaseHeaders(serviceRoleKey), "Content-Type": "application/json" }, body: JSON.stringify({ p_order_number: order.order_number, p_payment_status: paymentStatus, p_provider_transaction_id: status.transaction_id ?? null, p_provider_status: status.transaction_status, p_raw_payload: rawPayload }), cache: "no-store" });
+    let fallbackApplied = false;
     if (!applyResponse.ok) {
-      logger.error("ORDER_LOOKUP_RECONCILIATION_FAILED", { requestId, orderNumber: order.order_number, providerStatus: status.transaction_status, databaseStatus: applyResponse.status, databaseDurationMs: elapsedMs(applyStartedAt), durationMs: elapsedMs(startedAt) });
-      return order;
+      try {
+        await applyPaymentStateFallback({
+          supabaseUrl,
+          serviceRoleKey,
+          orderNumber: order.order_number,
+          paymentStatus,
+          providerTransactionId: status.transaction_id ?? null,
+          providerStatus: status.transaction_status,
+          rawPayload,
+        });
+        fallbackApplied = true;
+      } catch (fallbackError) {
+        logger.error("ORDER_LOOKUP_RECONCILIATION_FAILED", { requestId, orderNumber: order.order_number, providerStatus: status.transaction_status, databaseStatus: applyResponse.status, fallbackMessage: fallbackError instanceof Error ? fallbackError.message : "UNKNOWN_ERROR", databaseDurationMs: elapsedMs(applyStartedAt), durationMs: elapsedMs(startedAt) });
+        return order;
+      }
     }
-    logger.info("ORDER_LOOKUP_RECONCILED", { requestId, orderNumber: order.order_number, previousStatus: order.payment_status, providerStatus: status.transaction_status, paymentStatus, databaseDurationMs: elapsedMs(applyStartedAt), durationMs: elapsedMs(startedAt) });
+    logger.info("ORDER_LOOKUP_RECONCILED", { requestId, orderNumber: order.order_number, previousStatus: order.payment_status, providerStatus: status.transaction_status, paymentStatus, fallbackApplied, databaseDurationMs: elapsedMs(applyStartedAt), durationMs: elapsedMs(startedAt) });
     return { ...order, payment_status: paymentStatus, fulfillment_status: paymentStatus === "paid" ? "confirmed" : order.fulfillment_status, paid_at: paymentStatus === "paid" ? order.paid_at ?? new Date().toISOString() : order.paid_at };
   } catch (error) {
     logger.error("ORDER_LOOKUP_RECONCILIATION_ERROR", { requestId, orderNumber: order.order_number, message: error instanceof Error ? error.message : "UNKNOWN_ERROR", durationMs: elapsedMs(startedAt) });
