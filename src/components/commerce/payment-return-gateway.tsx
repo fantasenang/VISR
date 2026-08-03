@@ -19,22 +19,22 @@ export function PaymentReturnGateway() {
 
   const orderNumber = searchParams.get("order_id") ?? "";
   const orderHref = orderNumber
-    ? `/order?order_number=${encodeURIComponent(orderNumber)}`
+    ? `/order?order_number=${encodeURIComponent(orderNumber)}&payment=${status}`
     : "/order";
 
   const content = status === "finish"
     ? {
         eyebrow: "Payment received",
-        title: "Your place in Batch 2 is secured.",
-        body: "Thank you for becoming part of Batch 2. We’ll keep you updated as your VISR moves from production to shipping.",
-        note: "Your final payment status is verified server-side. Keep your order number for access from any device.",
+        title: "Your VISR payment has been received.",
+        body: "Open your order using the email or WhatsApp entered at checkout. Once the server verifies payment, your downloadable PDF receipt will appear there immediately.",
+        note: "The receipt includes the paid items, shipping charged, total payment, customer details, and payment verification date.",
       }
     : status === "pending"
       ? {
           eyebrow: "Payment pending",
           title: "Your reservation is still held.",
           body: "Complete the remaining Midtrans instructions before the reservation deadline to secure your place in Batch 2.",
-          note: "Bank transfers and selected payment methods may require additional processing time.",
+          note: "Bank transfers and selected payment methods may require additional processing time. The PDF receipt appears after payment is verified.",
         }
       : {
           eyebrow: "Payment incomplete",
@@ -69,7 +69,7 @@ export function PaymentReturnGateway() {
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <a href={orderHref} className="rounded-full bg-white px-6 py-4 text-center text-sm font-medium !text-black">
-                {status === "finish" ? "Track My VISR" : "View Order"}
+                {status === "finish" ? "Open Order & Receipt" : "View Order"}
               </a>
               {status !== "finish" && (
                 <a href="/checkout" className="rounded-full border border-white/15 px-6 py-4 text-center text-sm text-white/75">
