@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/admin/auth";
 import { getAdminDashboardData } from "@/lib/admin/data";
+import { reconcileInventoryCounters } from "@/lib/commerce/inventory-reconciliation";
 import { releaseExpiredVisrReservations } from "@/lib/commerce/reservations";
 
 export async function GET() {
@@ -15,6 +16,7 @@ export async function GET() {
   try {
     try {
       await releaseExpiredVisrReservations();
+      await reconcileInventoryCounters({ force: true, minimumIntervalMs: 0 });
     } catch (cleanupError) {
       console.warn(JSON.stringify({
         event: "ADMIN_RESERVATION_CLEANUP_SKIPPED",
