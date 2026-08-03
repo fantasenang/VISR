@@ -1,4 +1,5 @@
 import { MobileOnlyPage } from "@/components/layout/mobile-only-page";
+import { AutoOrderReceipt } from "./auto-order-receipt";
 import { OrderLookupReceiptClient } from "./order-lookup-receipt-client";
 
 export const metadata = {
@@ -9,6 +10,7 @@ export const metadata = {
 export default function OrderPage() {
   return (
     <MobileOnlyPage>
+      <AutoOrderReceipt />
       <OrderLookupReceiptClient />
     </MobileOnlyPage>
   );
