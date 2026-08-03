@@ -5,6 +5,7 @@ import CheckoutAvailabilityGuard from "./checkout-availability-guard";
 import CheckoutClient from "./checkout-client";
 import { CheckoutOrderAccessBridge } from "./checkout-order-access-bridge";
 import CheckoutPolish from "./checkout-polish";
+import PaymentResultRedirect from "./payment-result-redirect";
 import PreorderGate from "./preorder-gate";
 import { getLiveCatalog } from "@/lib/commerce/catalog-server";
 import { isPreorderPreviewOverride } from "@/lib/commerce/preorder-server";
@@ -62,6 +63,7 @@ export default async function CheckoutPage() {
   return (
     <MobileOnlyPage>
       <PreorderGate forceOpen={previewOpen}>
+        <PaymentResultRedirect />
         <CheckoutApiErrorNormalizer />
         <CheckoutOrderAccessBridge />
         <div className="border-b border-white/[0.08] bg-[#050505] px-6 pt-8 text-white md:px-12">
