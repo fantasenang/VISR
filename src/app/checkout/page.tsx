@@ -59,12 +59,37 @@ export default async function CheckoutPage() {
   return (
     <MobileOnlyPage>
       <PreorderGate forceOpen={previewOpen}>
-        <div className="border-b border-white/[0.07] bg-[#050505] px-6 pt-8 text-white md:px-12">
-          <div className="mx-auto max-w-7xl rounded-2xl border border-white/10 bg-white/[0.035] px-5 py-4">
-            <p className="text-[10px] uppercase tracking-[0.17em] text-white/38">Automatic shipping support</p>
-            <p className="mt-2 text-sm leading-6 text-white/68">
-              VISR covers up to {formatRupiah(SHIPPING_DISCOUNT_CAP_IDR)} of domestic shipping on every checkout. Shipping below the limit becomes free; only the remaining amount is charged.
-            </p>
+        <div className="border-b border-white/[0.08] bg-[#050505] px-6 pt-8 text-white md:px-12">
+          <div className="mx-auto max-w-7xl overflow-hidden rounded-[1.75rem] border border-white/15 bg-white/[0.055]">
+            <div className="grid gap-5 px-6 py-6 sm:grid-cols-[1fr_auto] sm:items-center md:px-8">
+              <div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="rounded-full border border-white/20 bg-white px-3 py-1 text-[9px] font-medium uppercase tracking-[0.18em] text-black">
+                    Automatically applied
+                  </span>
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-white/42">
+                    Batch 2 shipping benefit
+                  </p>
+                </div>
+                <h2 className="mt-4 text-2xl tracking-[-0.035em] sm:text-3xl">
+                  Free shipping up to {formatRupiah(SHIPPING_DISCOUNT_CAP_IDR)}.
+                </h2>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-white/58">
+                  VISR automatically covers the first {formatRupiah(SHIPPING_DISCOUNT_CAP_IDR)} of domestic shipping. No code is required.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 sm:min-w-[240px]">
+                <div className="rounded-2xl border border-white/10 bg-black/25 px-4 py-3">
+                  <p className="text-[9px] uppercase tracking-[0.15em] text-white/35">Shipping Rp12.000</p>
+                  <p className="mt-2 text-sm text-white">You pay Rp0</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-black/25 px-4 py-3">
+                  <p className="text-[9px] uppercase tracking-[0.15em] text-white/35">Shipping Rp24.000</p>
+                  <p className="mt-2 text-sm text-white">You pay Rp4.000</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         <CheckoutClient products={checkoutProducts} />
