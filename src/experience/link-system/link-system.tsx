@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useRef } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
@@ -203,6 +204,11 @@ export function LinkSystem() {
                 <p className={styles.frameNumber}>{frame.number} / 05</p>
                 <h3>{frame.title}</h3>
                 <p className={styles.detail}>{frame.detail}</p>
+                {frame.number === "05" && (
+                  <Link href="/link" className={styles.linkCta}>
+                    Explore VISR Link <span aria-hidden="true">→</span>
+                  </Link>
+                )}
               </div>
             </article>
           ))}
