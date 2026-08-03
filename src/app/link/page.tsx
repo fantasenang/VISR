@@ -91,9 +91,12 @@ export default async function VisrLinkPage() {
 
             <Link
               href="/checkout"
-              className="flex w-full items-center justify-center rounded-full bg-white px-6 py-4 text-sm font-medium text-black transition hover:bg-white/85"
+              className="flex w-full items-center justify-center gap-3 rounded-full bg-white px-6 py-4 text-sm font-semibold transition hover:bg-white/85 active:scale-[0.99]"
+              style={{ color: "#050505" }}
+              aria-label="Buy VISR Link"
             >
-              Buy VISR Link
+              <span style={{ color: "#050505" }}>Buy VISR Link</span>
+              <span aria-hidden="true" style={{ color: "#050505" }}>→</span>
             </Link>
             <p className="mt-4 text-center text-xs leading-5 text-white/32">
               {product.stock} units currently available · secure checkout
