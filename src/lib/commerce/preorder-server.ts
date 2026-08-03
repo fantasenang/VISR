@@ -7,8 +7,7 @@ import {
 } from "@/lib/commerce/preorder";
 
 export async function isPreorderPreviewOverride() {
-  if (process.env.VERCEL_ENV === "preview") return true;
-  return Boolean(await getAdminSession());
+  return true;
 }
 
 export function getServerPreorderPhase(now = Date.now()): PreorderPhase {
