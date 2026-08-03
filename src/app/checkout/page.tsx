@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { MobileOnlyPage } from "@/components/layout/mobile-only-page";
 import CheckoutApiErrorNormalizer from "./checkout-api-error-normalizer";
 import CheckoutClient from "./checkout-client";
+import { CheckoutOrderAccessBridge } from "./checkout-order-access-bridge";
 import CheckoutPolish from "./checkout-polish";
 import PreorderGate from "./preorder-gate";
 import { getLiveCatalog } from "@/lib/commerce/catalog-server";
@@ -61,6 +62,7 @@ export default async function CheckoutPage() {
     <MobileOnlyPage>
       <PreorderGate forceOpen={previewOpen}>
         <CheckoutApiErrorNormalizer />
+        <CheckoutOrderAccessBridge />
         <div className="border-b border-white/[0.08] bg-[#050505] px-6 pt-8 text-white md:px-12">
           <div className="mx-auto max-w-7xl overflow-hidden rounded-[1.75rem] border border-white/15 bg-white/[0.055]">
             <div className="grid gap-5 px-6 py-6 sm:grid-cols-[1fr_auto] sm:items-center md:px-8">
