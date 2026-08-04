@@ -90,9 +90,9 @@ function addPreorderNotice() {
     "mb-10 grid gap-5 rounded-[2rem] border border-white/10 bg-white/[0.035] p-6 text-sm leading-6 text-white/55 md:grid-cols-3 md:p-8";
   notice.innerHTML = `
     <div><p class="visr-label text-white/35">Preorder Opens</p><p class="mt-2 text-base text-white/80">7 August 2026</p></div>
-    <div><p class="visr-label text-white/35">Production</p><p class="mt-2 text-base text-white/80">Maximum 14 business days after preorder closes</p></div>
-    <div><p class="visr-label text-white/35">Dispatch</p><p class="mt-2 text-base text-white/80">Sent immediately after final inspection</p></div>
-    <p class="md:col-span-3 text-xs leading-5 text-white/40">Preorder price Rp179.000. Ready-stock price Rp199.000. Finished units are dispatched without waiting for the entire batch to be completed.</p>
+    <div><p class="visr-label text-white/35">Preorder Closes</p><p class="mt-2 text-base text-white/80">13 August · 23.59 WIB</p></div>
+    <div><p class="visr-label text-white/35">Estimated Dispatch</p><p class="mt-2 text-base text-white/80">18–25 August 2026</p></div>
+    <p class="md:col-span-3 text-xs leading-5 text-white/40">Production runs progressively before and throughout the preorder period. Finished units are dispatched in order sequence after passing final inspection.</p>
   `;
   header.insertAdjacentElement("afterend", notice);
 }
@@ -114,7 +114,7 @@ function addReviewAcknowledgement() {
   acknowledgement.className =
     "rounded-2xl border border-white/10 bg-white/[0.035] p-5 text-xs leading-6 text-white/50";
   acknowledgement.textContent =
-    "By confirming, you acknowledge that this is a preorder. Production starts after the preorder period closes and takes a maximum of 14 business days. Units are dispatched immediately after passing final inspection.";
+    "By confirming, you acknowledge that this is a preorder with estimated dispatch between 18 and 25 August 2026. Units are dispatched in order sequence after passing final inspection.";
   actions.insertAdjacentElement("beforebegin", acknowledgement);
 }
 
