@@ -36,12 +36,12 @@ const faqItems = [
   {
     question: "How does the Batch 2 preorder work?",
     answer:
-      "The preorder can close early when the available allocation is fully reserved. Production runs progressively, and completed units are processed in order sequence. The full allocation of 100 VISR Carry units is scheduled for a maximum production period of 14 business days.",
+      "The preorder opens on 7 August 2026 and closes on 13 August at 23.59 WIB, or earlier when the available allocation is fully reserved. Production runs progressively before and throughout the preorder period, and completed units are processed in order sequence.",
   },
   {
     question: "When will my order be shipped?",
     answer:
-      "Each unit is dispatched immediately after passing final quality control; VISR does not wait for the entire batch to finish. Tracking is shared by the VISR admin through WhatsApp and is also available through Track Your Order on the website. Current domestic couriers are JNE and J&T. International shipping is not available yet.",
+      "Estimated dispatch is 18–25 August 2026. Each unit is dispatched in order sequence after passing final quality control; VISR does not wait for the entire batch to finish. Tracking is shared by the VISR admin through WhatsApp and is also available through Track Your Order on the website. Current domestic couriers are JNE and J&T. International shipping is not available yet.",
   },
   {
     question: "Which payment methods are available?",
