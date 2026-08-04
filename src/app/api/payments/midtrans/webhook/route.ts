@@ -157,9 +157,15 @@ async function notifyNewPaidOrder(input: {
   isProduction: boolean;
   requestId: string;
 }) {
+  const lookupInput = {
+    supabaseUrl: input.supabaseUrl,
+    databaseHeaders: input.databaseHeaders,
+    orderId: input.order.id,
+  };
+
   let items: OrderItemRow[] = [];
   try {
-    items = await readOrderItems(input);
+    items = await readOrderItems(lookupInput);
   } catch (error) {
     logger.error("PAID_ORDER_ITEMS_LOOKUP_FAILED", {
       requestId: input.requestId,
@@ -169,7 +175,7 @@ async function notifyNewPaidOrder(input: {
     });
   }
 
-  const shipment = await readShipment(input);
+  const shipment = await readShipment(lookupInput);
 
   try {
     const result = await sendTelegramPaidOrder({
