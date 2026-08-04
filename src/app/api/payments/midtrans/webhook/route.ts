@@ -3,9 +3,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ADMIN_CANCEL_MARKER } from "@/lib/admin/order-actions";
 import { applyPaymentStateFallback } from "@/lib/commerce/payment-state-fallback";
-import { sendMetaPurchaseEvent } from "@/lib/marketing/meta-conversions";
-import { elapsedMs, logger, requestIdFrom } from "@/lib/observability/logger";
 import { apiError, readJsonBody } from "@/lib/http/api";
+import { sendMetaPurchaseEvent } from "@/lib/marketing/meta-conversions";
+import { sendTelegramPaidOrder } from "@/lib/notifications/telegram";
+import { elapsedMs, logger, requestIdFrom } from "@/lib/observability/logger";
 
 const notificationSchema = z.object({
   order_id: z.string().min(1).max(100),
@@ -16,6 +17,8 @@ const notificationSchema = z.object({
   transaction_status: z.string().min(1).max(50),
   fraud_status: z.string().max(50).optional(),
 });
+
+type PaymentStatus = "paid" | "expired" | "pending";
 
 type OrderRow = {
   id: string;
@@ -33,8 +36,15 @@ type OrderRow = {
 
 type OrderItemRow = {
   sku: string;
+  product_name: string;
+  variant_name: string | null;
   quantity: number;
   unit_price_idr: number;
+};
+
+type ShipmentRow = {
+  courier: string | null;
+  service: string | null;
 };
 
 type MidtransStatusResponse = {
@@ -58,109 +68,144 @@ function parseGrossAmount(value: string) {
   return Number.isFinite(amount) && Number.isInteger(amount) && amount >= 0 ? amount : null;
 }
 
-function normalizePaymentStatus(transactionStatus: string, fraudStatus?: string) {
-  if (transactionStatus === "settlement") return "paid" as const;
-  if (transactionStatus === "capture" && fraudStatus === "accept") return "paid" as const;
-  if (["expire", "cancel", "deny"].includes(transactionStatus)) return "expired" as const;
-  return "pending" as const;
+function normalizePaymentStatus(transactionStatus: string, fraudStatus?: string): PaymentStatus {
+  if (transactionStatus === "settlement") return "paid";
+  if (transactionStatus === "capture" && fraudStatus === "accept") return "paid";
+  if (["expire", "cancel", "deny"].includes(transactionStatus)) return "expired";
+  return "pending";
+}
+
+async function readOrderItems(input: {
+  supabaseUrl: string;
+  databaseHeaders: Record<string, string>;
+  orderId: string;
+}) {
+  const response = await fetch(
+    `${input.supabaseUrl}/rest/v1/order_items?order_id=eq.${encodeURIComponent(input.orderId)}&select=sku,product_name,variant_name,quantity,unit_price_idr&order=created_at.asc`,
+    { headers: input.databaseHeaders, cache: "no-store" },
+  );
+  if (!response.ok) throw new Error(`ORDER_ITEMS_LOOKUP_FAILED:${response.status}`);
+  return (await response.json()) as OrderItemRow[];
+}
+
+async function readShipment(input: {
+  supabaseUrl: string;
+  databaseHeaders: Record<string, string>;
+  orderId: string;
+}) {
+  const response = await fetch(
+    `${input.supabaseUrl}/rest/v1/shipments?order_id=eq.${encodeURIComponent(input.orderId)}&select=courier,service&limit=1`,
+    { headers: input.databaseHeaders, cache: "no-store" },
+  );
+  if (!response.ok) return null;
+  return ((await response.json()) as ShipmentRow[])[0] ?? null;
 }
 
 async function reportPaidOrderToMeta(input: {
   order: OrderRow;
-  normalizedStatus: "paid" | "expired" | "pending";
+  items: OrderItemRow[];
   isProduction: boolean;
-  supabaseUrl: string;
-  databaseHeaders: Record<string, string>;
   requestId: string;
 }) {
-  const { order, normalizedStatus, isProduction, supabaseUrl, databaseHeaders, requestId } = input;
-  if (normalizedStatus !== "paid" || order.payment_status === "paid") return;
-
-  if (!isProduction) {
+  if (!input.isProduction) {
     logger.info("META_PURCHASE_SKIPPED_SANDBOX", {
-      requestId,
-      orderId: order.id,
-      orderNumber: order.order_number,
+      requestId: input.requestId,
+      orderId: input.order.id,
+      orderNumber: input.order.order_number,
     });
     return;
   }
 
-  const itemsStartedAt = performance.now();
-  const itemsResponse = await fetch(
-    `${supabaseUrl}/rest/v1/order_items?order_id=eq.${encodeURIComponent(order.id)}&select=sku,quantity,unit_price_idr&order=created_at.asc`,
-    { headers: databaseHeaders, cache: "no-store" },
-  );
-  const itemsLookupDurationMs = elapsedMs(itemsStartedAt);
-
-  if (!itemsResponse.ok) {
-    logger.error("META_PURCHASE_ITEMS_LOOKUP_FAILED", {
-      requestId,
-      orderId: order.id,
-      orderNumber: order.order_number,
-      databaseStatus: itemsResponse.status,
-      itemsLookupDurationMs,
-    });
-    return;
-  }
-
-  const items = (await itemsResponse.json()) as OrderItemRow[];
-  if (items.length === 0) {
-    logger.error("META_PURCHASE_ITEMS_EMPTY", {
-      requestId,
-      orderId: order.id,
-      orderNumber: order.order_number,
-      itemsLookupDurationMs,
-    });
-    return;
-  }
-
-  const metaStartedAt = performance.now();
   try {
     const result = await sendMetaPurchaseEvent({
-      id: order.id,
-      orderNumber: order.order_number,
-      customerName: order.customer_name,
-      email: order.email,
-      whatsapp: order.whatsapp,
-      province: order.province,
-      city: order.city,
-      postalCode: order.postal_code,
-      totalIdr: order.total_idr,
-      items: items.map((item) => ({
+      id: input.order.id,
+      orderNumber: input.order.order_number,
+      customerName: input.order.customer_name,
+      email: input.order.email,
+      whatsapp: input.order.whatsapp,
+      province: input.order.province,
+      city: input.order.city,
+      postalCode: input.order.postal_code,
+      totalIdr: input.order.total_idr,
+      items: input.items.map((item) => ({
         sku: item.sku,
         quantity: item.quantity,
         unitPriceIdr: item.unit_price_idr,
       })),
     });
 
-    if (!result.sent) {
-      logger.warn("META_PURCHASE_NOT_CONFIGURED", {
-        requestId,
-        orderId: order.id,
-        orderNumber: order.order_number,
-        durationMs: elapsedMs(metaStartedAt),
-      });
-      return;
-    }
-
-    logger.info("META_PURCHASE_SENT", {
-      requestId,
-      orderId: order.id,
-      orderNumber: order.order_number,
-      eventsReceived: result.eventsReceived,
-      traceId: result.traceId,
-      testEvent: result.testEvent,
-      itemsLookupDurationMs,
-      durationMs: elapsedMs(metaStartedAt),
+    logger.info(result.sent ? "META_PURCHASE_SENT" : "META_PURCHASE_NOT_CONFIGURED", {
+      requestId: input.requestId,
+      orderId: input.order.id,
+      orderNumber: input.order.order_number,
+      eventsReceived: result.sent ? result.eventsReceived : null,
     });
   } catch (error) {
     logger.error("META_PURCHASE_SEND_FAILED", {
-      requestId,
-      orderId: order.id,
-      orderNumber: order.order_number,
+      requestId: input.requestId,
+      orderId: input.order.id,
+      orderNumber: input.order.order_number,
       message: error instanceof Error ? error.message : "UNKNOWN_ERROR",
-      itemsLookupDurationMs,
-      durationMs: elapsedMs(metaStartedAt),
+    });
+  }
+}
+
+async function notifyNewPaidOrder(input: {
+  order: OrderRow;
+  supabaseUrl: string;
+  databaseHeaders: Record<string, string>;
+  isProduction: boolean;
+  requestId: string;
+}) {
+  let items: OrderItemRow[] = [];
+  try {
+    items = await readOrderItems(input);
+  } catch (error) {
+    logger.error("PAID_ORDER_ITEMS_LOOKUP_FAILED", {
+      requestId: input.requestId,
+      orderId: input.order.id,
+      orderNumber: input.order.order_number,
+      message: error instanceof Error ? error.message : "UNKNOWN_ERROR",
+    });
+  }
+
+  const shipment = await readShipment(input);
+
+  try {
+    const result = await sendTelegramPaidOrder({
+      orderNumber: input.order.order_number,
+      customerName: input.order.customer_name,
+      totalIdr: input.order.total_idr,
+      courier: shipment?.courier ?? null,
+      service: shipment?.service ?? null,
+      items: items.map((item) => ({
+        name: item.product_name,
+        variantName: item.variant_name,
+        quantity: item.quantity,
+      })),
+    });
+
+    logger.info(result.sent ? "TELEGRAM_PAID_ORDER_SENT" : "TELEGRAM_PAID_ORDER_NOT_CONFIGURED", {
+      requestId: input.requestId,
+      orderId: input.order.id,
+      orderNumber: input.order.order_number,
+      environment: input.isProduction ? "production" : "sandbox",
+    });
+  } catch (error) {
+    logger.error("TELEGRAM_PAID_ORDER_SEND_FAILED", {
+      requestId: input.requestId,
+      orderId: input.order.id,
+      orderNumber: input.order.order_number,
+      message: error instanceof Error ? error.message : "UNKNOWN_ERROR",
+    });
+  }
+
+  if (items.length > 0) {
+    await reportPaidOrderToMeta({
+      order: input.order,
+      items,
+      isProduction: input.isProduction,
+      requestId: input.requestId,
     });
   }
 }
@@ -169,12 +214,15 @@ export async function POST(request: Request) {
   const requestId = requestIdFrom(request);
   const startedAt = performance.now();
   const body = await readJsonBody(request);
+
   if (!body.ok) {
-    logger.warn("MIDTRANS_WEBHOOK_INVALID_BODY", { requestId, code: body.code, durationMs: elapsedMs(startedAt) });
+    logger.warn("MIDTRANS_WEBHOOK_INVALID_BODY", { requestId, code: body.code });
     return apiError(
       requestId,
       body.code,
-      body.code === "PAYLOAD_TOO_LARGE" ? "Notification body exceeds the 64 KB limit." : "Notification body must contain valid JSON.",
+      body.code === "PAYLOAD_TOO_LARGE"
+        ? "Notification body exceeds the 64 KB limit."
+        : "Notification body must contain valid JSON.",
       body.status,
     );
   }
@@ -184,7 +232,6 @@ export async function POST(request: Request) {
     logger.warn("MIDTRANS_WEBHOOK_INVALID_BODY", {
       requestId,
       issues: parsed.error.issues.map((issue) => issue.path.join(".")),
-      durationMs: elapsedMs(startedAt),
     });
     return apiError(requestId, "INVALID_NOTIFICATION", "The Midtrans notification payload is invalid.", 400, parsed.error.flatten());
   }
@@ -200,8 +247,6 @@ export async function POST(request: Request) {
       hasServerKey: Boolean(serverKey),
       hasSupabaseUrl: Boolean(supabaseUrl),
       hasServiceRoleKey: Boolean(serviceRoleKey),
-      environment: isProduction ? "production" : "sandbox",
-      durationMs: elapsedMs(startedAt),
     });
     return apiError(requestId, "PAYMENT_NOT_CONFIGURED", "Payment processing is not configured.", 503);
   }
@@ -216,36 +261,27 @@ export async function POST(request: Request) {
       requestId,
       orderNumber: payload.order_id,
       transactionId: payload.transaction_id ?? null,
-      providerStatus: payload.transaction_status,
-      durationMs: elapsedMs(startedAt),
     });
     return apiError(requestId, "INVALID_SIGNATURE", "The notification signature is invalid.", 401);
   }
 
   const databaseHeaders = { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` };
-  const lookupStartedAt = performance.now();
   const orderResponse = await fetch(
     `${supabaseUrl}/rest/v1/orders?order_number=eq.${encodeURIComponent(payload.order_id)}&select=id,order_number,customer_name,email,whatsapp,province,city,postal_code,total_idr,payment_status,notes&limit=1`,
     { headers: databaseHeaders, cache: "no-store" },
   );
-  const orderLookupDurationMs = elapsedMs(lookupStartedAt);
 
   if (!orderResponse.ok) {
     logger.error("MIDTRANS_WEBHOOK_ORDER_LOOKUP_FAILED", {
       requestId,
       orderNumber: payload.order_id,
       databaseStatus: orderResponse.status,
-      orderLookupDurationMs,
-      durationMs: elapsedMs(startedAt),
     });
     return apiError(requestId, "ORDER_LOOKUP_FAILED", "The order could not be verified.", 502);
   }
 
   const order = ((await orderResponse.json()) as OrderRow[])[0];
-  if (!order) {
-    logger.warn("MIDTRANS_WEBHOOK_ORDER_NOT_FOUND", { requestId, orderNumber: payload.order_id, orderLookupDurationMs, durationMs: elapsedMs(startedAt) });
-    return apiError(requestId, "ORDER_NOT_FOUND", "The referenced order does not exist.", 404);
-  }
+  if (!order) return apiError(requestId, "ORDER_NOT_FOUND", "The referenced order does not exist.", 404);
 
   const notifiedAmount = parseGrossAmount(payload.gross_amount);
   if (notifiedAmount === null || notifiedAmount !== order.total_idr) {
@@ -254,8 +290,6 @@ export async function POST(request: Request) {
       orderNumber: payload.order_id,
       expectedAmount: order.total_idr,
       notifiedAmount,
-      transactionId: payload.transaction_id ?? null,
-      durationMs: elapsedMs(startedAt),
     });
     return apiError(requestId, "AMOUNT_MISMATCH", "The notified amount does not match the order total.", 409);
   }
@@ -266,11 +300,6 @@ export async function POST(request: Request) {
       requestId,
       orderId: order.id,
       orderNumber: order.order_number,
-      paymentStatus: order.payment_status,
-      providerStatus: payload.transaction_status,
-      transactionId: payload.transaction_id ?? null,
-      orderLookupDurationMs,
-      durationMs: elapsedMs(startedAt),
     });
     return NextResponse.json(
       { received: true, ignored: true, requestId },
@@ -282,20 +311,25 @@ export async function POST(request: Request) {
   let fraudStatus = payload.fraud_status;
   let transactionId = payload.transaction_id ?? null;
   let verifiedStatus: MidtransStatusResponse | null = null;
-  let verificationDurationMs: number | null = null;
   const statusBaseUrl = isProduction ? "https://api.midtrans.com/v2" : "https://api.sandbox.midtrans.com/v2";
 
   try {
-    const verificationStartedAt = performance.now();
     const statusResponse = await fetch(`${statusBaseUrl}/${encodeURIComponent(payload.order_id)}/status`, {
-      headers: { Authorization: `Basic ${Buffer.from(`${serverKey}:`).toString("base64")}`, Accept: "application/json" },
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${serverKey}:`).toString("base64")}`,
+        Accept: "application/json",
+      },
       cache: "no-store",
     });
-    verificationDurationMs = elapsedMs(verificationStartedAt);
     const candidate = (await statusResponse.json().catch(() => ({}))) as MidtransStatusResponse;
     const verifiedAmount = candidate.gross_amount ? parseGrossAmount(candidate.gross_amount) : null;
 
-    if (statusResponse.ok && candidate.transaction_status && candidate.order_id === order.order_number && verifiedAmount === order.total_idr) {
+    if (
+      statusResponse.ok &&
+      candidate.transaction_status &&
+      candidate.order_id === order.order_number &&
+      verifiedAmount === order.total_idr
+    ) {
       verifiedStatus = candidate;
       transactionStatus = candidate.transaction_status;
       fraudStatus = candidate.fraud_status;
@@ -303,19 +337,15 @@ export async function POST(request: Request) {
     } else {
       logger.warn("MIDTRANS_STATUS_VERIFICATION_SKIPPED", {
         requestId,
-        environment: isProduction ? "production" : "sandbox",
         orderNumber: order.order_number,
         providerHttpStatus: statusResponse.status,
-        providerStatusMessage: candidate.status_message ?? null,
-        verificationDurationMs,
       });
     }
   } catch (error) {
     logger.warn("MIDTRANS_STATUS_VERIFICATION_UNAVAILABLE", {
       requestId,
       orderNumber: order.order_number,
-      message: error instanceof Error ? error.message : "unknown",
-      verificationDurationMs,
+      message: error instanceof Error ? error.message : "UNKNOWN_ERROR",
     });
   }
 
@@ -326,10 +356,7 @@ export async function POST(request: Request) {
       requestId,
       orderId: order.id,
       orderNumber: order.order_number,
-      currentStatus: order.payment_status,
-      providerStatus: transactionStatus,
       normalizedStatus,
-      durationMs: elapsedMs(startedAt),
     });
     return NextResponse.json(
       { received: true, ignored: true, requestId },
@@ -342,6 +369,7 @@ export async function POST(request: Request) {
     verified_status: verifiedStatus,
     verification_source: verifiedStatus ? "status_api" : "signed_notification",
   };
+
   const updateStartedAt = performance.now();
   const rpcResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/apply_midtrans_notification`, {
     method: "POST",
@@ -358,16 +386,12 @@ export async function POST(request: Request) {
 
   let fallbackApplied = false;
   if (!rpcResponse.ok) {
-    const databaseFailure = await rpcResponse.json().catch(() => ({})) as Record<string, unknown>;
+    const databaseFailure = (await rpcResponse.json().catch(() => ({}))) as Record<string, unknown>;
     logger.warn("MIDTRANS_WEBHOOK_RPC_FAILED_USING_FALLBACK", {
       requestId,
       orderNumber: order.order_number,
-      transactionId,
-      providerStatus: transactionStatus,
-      normalizedStatus,
       databaseStatus: rpcResponse.status,
       databaseCode: databaseFailure.code ?? null,
-      databaseMessage: databaseFailure.message ?? null,
     });
 
     try {
@@ -385,31 +409,23 @@ export async function POST(request: Request) {
       logger.error("MIDTRANS_WEBHOOK_UPDATE_FAILED", {
         requestId,
         orderNumber: order.order_number,
-        transactionId,
-        providerStatus: transactionStatus,
-        normalizedStatus,
-        databaseStatus: rpcResponse.status,
-        databaseCode: databaseFailure.code ?? null,
-        databaseMessage: databaseFailure.message ?? null,
         fallbackMessage: fallbackError instanceof Error ? fallbackError.message : "UNKNOWN_ERROR",
-        databaseUpdateDurationMs: elapsedMs(updateStartedAt),
-        durationMs: elapsedMs(startedAt),
       });
       return apiError(requestId, "PAYMENT_UPDATE_FAILED", "The payment status could not be applied.", 502);
     }
   }
 
-  const databaseUpdateDurationMs = elapsedMs(updateStartedAt);
-  await reportPaidOrderToMeta({
-    order,
-    normalizedStatus,
-    isProduction,
-    supabaseUrl,
-    databaseHeaders,
-    requestId,
-  });
-
   const duplicate = order.payment_status === normalizedStatus;
+  if (normalizedStatus === "paid" && !duplicate) {
+    await notifyNewPaidOrder({
+      order,
+      supabaseUrl,
+      databaseHeaders,
+      isProduction,
+      requestId,
+    });
+  }
+
   logger.info("MIDTRANS_WEBHOOK_APPLIED", {
     requestId,
     orderId: order.id,
@@ -421,9 +437,7 @@ export async function POST(request: Request) {
     duplicate,
     fallbackApplied,
     verificationSource: verifiedStatus ? "status_api" : "signed_notification",
-    orderLookupDurationMs,
-    verificationDurationMs,
-    databaseUpdateDurationMs,
+    databaseUpdateDurationMs: elapsedMs(updateStartedAt),
     durationMs: elapsedMs(startedAt),
   });
 
