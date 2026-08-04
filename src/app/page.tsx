@@ -53,7 +53,7 @@ export default async function HomePage() {
               <div className="md:col-span-4">
                 <p className="visr-label text-white/42">Batch 2 Preorder</p>
                 <h2 className="mt-6 text-[clamp(2.7rem,5vw,5.8rem)] font-normal leading-[0.96] tracking-[-0.05em]">
-                  Built after the preorder closes.
+                  Prepared during the preorder window.
                 </h2>
               </div>
 
@@ -68,13 +68,13 @@ export default async function HomePage() {
                     <p className="mt-3 text-2xl">13 August · 23.59 WIB</p>
                   </div>
                   <div>
-                    <p className="visr-label text-white/35">Production</p>
-                    <p className="mt-3 text-2xl">Maximum 14 business days</p>
+                    <p className="visr-label text-white/35">Estimated Dispatch</p>
+                    <p className="mt-3 text-2xl">18–25 August 2026</p>
                   </div>
                 </div>
 
                 <p className="max-w-2xl text-base leading-7 text-white/55">
-                  Preorder may close earlier when all 100 units are reserved. Production runs progressively, and finished units are dispatched in order sequence immediately after passing final inspection.
+                  Preorder may close earlier when all 100 units are reserved. Production runs progressively before and throughout the preorder period, and finished units are dispatched in order sequence after passing final inspection.
                 </p>
 
                 <div className="grid gap-7 sm:grid-cols-2">
