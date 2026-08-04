@@ -231,9 +231,11 @@ export async function getAdminDashboardData() {
     updatedAt: product.updated_at,
   }));
 
+  const archivedPaymentStatuses = new Set(["expired", "failed", "refunded"]);
+  const activeOrders = orders.filter((order) => !archivedPaymentStatuses.has(order.paymentStatus));
   const paidOrders = orders.filter((order) => order.paymentStatus === "paid");
   const overview = {
-    totalOrders: orders.length,
+    totalOrders: activeOrders.length,
     pendingPayment: orders.filter((order) => order.paymentStatus === "pending").length,
     paidOrders: paidOrders.length,
     needsAction: paidOrders.filter((order) => !["shipped", "delivered"].includes(order.fulfillmentStatus)).length,
