@@ -49,6 +49,14 @@ function cartFromItems(items: Array<{ sku: string; quantity: number }>) {
   return { carryQty, haloQty, linkQty };
 }
 
+function subtotalFromCart(cart: { carryQty: number; haloQty: number; linkQty: number }) {
+  return (
+    cart.carryQty * products.carry.price +
+    cart.haloQty * products.halo.price +
+    cart.linkQty * products.additionalLink.price
+  );
+}
+
 function validationMessage(path: PropertyKey[], fallback: string) {
   const field = String(path[0] ?? "");
   if (field === "customer") {
@@ -87,6 +95,7 @@ async function createReservation(
 
   try {
     const cart = cartFromItems(parsedData.items);
+    const orderSubtotalIdr = subtotalFromCart(cart);
     const profile = getPackingProfile(cart);
     const originId = await resolveOriginId();
     const selectedCourier = parsedData.shipping.courier;
@@ -97,6 +106,7 @@ async function createReservation(
       destinationId: parsedData.shipping.destinationId,
       weightGrams: weight.chargeableWeightGrams,
       couriers: [selectedCourier],
+      orderSubtotalIdr,
     });
     const shippingQuoteDurationMs = elapsedMs(ratesStartedAt);
 
@@ -229,6 +239,7 @@ async function createReservation(
       orderId: reservation.order_id,
       orderNumber: reservation.order_number,
       itemCount: parsedData.items.reduce((sum, item) => sum + item.quantity, 0),
+      orderSubtotalIdr,
       courier: selectedCourier,
       service: liveRate.service,
       shippingCostIdr: shipping.shipping_cost_idr,
