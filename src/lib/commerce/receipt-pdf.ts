@@ -1,1 +1,1 @@
-export * from "./receipt-pdf-v3";
+export * from "./receipt-pdf-v4";
