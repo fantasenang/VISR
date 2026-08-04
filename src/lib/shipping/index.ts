@@ -2,6 +2,7 @@ import { formatRupiah } from "@/lib/commerce/catalog";
 import { getPackingProfile } from "./packing";
 
 export const SHIPPING_DISCOUNT_CAP_IDR = 20_000;
+export const SHIPPING_DISCOUNT_MINIMUM_SUBTOTAL_IDR = 200_000;
 
 export type CheckoutCourier = "jne" | "jnt";
 
@@ -25,14 +26,22 @@ export type ShippingRate = {
   etd?: string;
 };
 
-export function calculateShippingDiscount(quotedCostIdr: number) {
+export function calculateShippingDiscount(quotedCostIdr: number, orderSubtotalIdr: number) {
   const normalizedCostIdr = Number.isFinite(quotedCostIdr)
     ? Math.max(0, Math.round(quotedCostIdr))
     : 0;
-  const discountIdr = Math.min(normalizedCostIdr, SHIPPING_DISCOUNT_CAP_IDR);
+  const normalizedSubtotalIdr = Number.isFinite(orderSubtotalIdr)
+    ? Math.max(0, Math.round(orderSubtotalIdr))
+    : 0;
+  const eligible = normalizedSubtotalIdr >= SHIPPING_DISCOUNT_MINIMUM_SUBTOTAL_IDR;
+  const discountIdr = eligible
+    ? Math.min(normalizedCostIdr, SHIPPING_DISCOUNT_CAP_IDR)
+    : 0;
 
   return {
     quotedCostIdr: normalizedCostIdr,
+    orderSubtotalIdr: normalizedSubtotalIdr,
+    eligible,
     discountIdr,
     payableCostIdr: normalizedCostIdr - discountIdr,
   };
