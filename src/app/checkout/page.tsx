@@ -9,7 +9,11 @@ import PaymentResultRedirect from "./payment-result-redirect";
 import PreorderGate from "./preorder-gate";
 import { getLiveCatalog } from "@/lib/commerce/catalog-server";
 import { isPreorderPreviewOverride } from "@/lib/commerce/preorder-server";
-import { formatRupiah, SHIPPING_DISCOUNT_CAP_IDR } from "@/lib/shipping";
+import {
+  formatRupiah,
+  SHIPPING_DISCOUNT_CAP_IDR,
+  SHIPPING_DISCOUNT_MINIMUM_SUBTOTAL_IDR,
+} from "@/lib/shipping";
 
 export const metadata: Metadata = {
   title: "Reserve Your VISR — Batch 2",
@@ -82,18 +86,18 @@ export default async function CheckoutPage() {
                   Free shipping up to {formatRupiah(SHIPPING_DISCOUNT_CAP_IDR)}.
                 </h2>
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-white/58">
-                  VISR automatically covers the first {formatRupiah(SHIPPING_DISCOUNT_CAP_IDR)} of domestic shipping. No code is required.
+                  Active automatically for product subtotals of at least {formatRupiah(SHIPPING_DISCOUNT_MINIMUM_SUBTOTAL_IDR)}. VISR covers the first {formatRupiah(SHIPPING_DISCOUNT_CAP_IDR)} of domestic shipping; no code is required.
                 </p>
               </div>
 
               <div className="grid grid-cols-2 gap-3 sm:min-w-[240px]">
                 <div className="rounded-2xl border border-white/10 bg-black/25 px-4 py-3">
-                  <p className="text-[9px] uppercase tracking-[0.15em] text-white/35">Shipping Rp12.000</p>
-                  <p className="mt-2 text-sm text-white">You pay Rp0</p>
+                  <p className="text-[9px] uppercase tracking-[0.15em] text-white/35">Minimum order</p>
+                  <p className="mt-2 text-sm text-white">{formatRupiah(SHIPPING_DISCOUNT_MINIMUM_SUBTOTAL_IDR)}</p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-black/25 px-4 py-3">
-                  <p className="text-[9px] uppercase tracking-[0.15em] text-white/35">Shipping Rp24.000</p>
-                  <p className="mt-2 text-sm text-white">You pay Rp4.000</p>
+                  <p className="text-[9px] uppercase tracking-[0.15em] text-white/35">Maximum benefit</p>
+                  <p className="mt-2 text-sm text-white">{formatRupiah(SHIPPING_DISCOUNT_CAP_IDR)}</p>
                 </div>
               </div>
             </div>
