@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { products } from "@/lib/commerce/catalog";
 import { getChargeableWeightGrams, getPackingProfile } from "@/lib/shipping/packing";
 import { calculateDomesticRates, searchDomesticDestinations } from "@/lib/shipping/rajaongkir";
 import { elapsedMs, logger, requestIdFrom } from "@/lib/observability/logger";
@@ -47,6 +48,10 @@ export async function POST(request: Request) {
 
   try {
     const profile = getPackingProfile(parsed.data.cart);
+    const orderSubtotalIdr =
+      parsed.data.cart.carryQty * products.carry.price +
+      parsed.data.cart.haloQty * products.halo.price +
+      parsed.data.cart.linkQty * products.additionalLink.price;
     const originId = await resolveOriginId();
     const jneWeight = getChargeableWeightGrams(profile, "jne");
     const jntWeight = getChargeableWeightGrams(profile, "jnt");
@@ -57,12 +62,14 @@ export async function POST(request: Request) {
         destinationId: parsed.data.destinationId,
         weightGrams: jneWeight.chargeableWeightGrams,
         couriers: ["jne"],
+        orderSubtotalIdr,
       }),
       calculateDomesticRates({
         originId,
         destinationId: parsed.data.destinationId,
         weightGrams: jntWeight.chargeableWeightGrams,
         couriers: ["jnt"],
+        orderSubtotalIdr,
       }),
     ]);
 
@@ -83,6 +90,7 @@ export async function POST(request: Request) {
     logger.info("SHIPPING_RATES_CALCULATED", {
       requestId,
       destinationId: parsed.data.destinationId,
+      orderSubtotalIdr,
       resultCount: rates.length,
       durationMs: elapsedMs(startedAt),
     });
