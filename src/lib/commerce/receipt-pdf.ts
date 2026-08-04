@@ -28,6 +28,7 @@ const PAGE_WIDTH = 298;
 const PAGE_HEIGHT = 420;
 const LEFT = 22;
 const RIGHT = PAGE_WIDTH - 22;
+const CONTENT_WIDTH = RIGHT - LEFT;
 
 function safePdfText(value: string) {
   return value
@@ -74,57 +75,115 @@ export function buildPaymentReceiptPdf(receipt: PaymentReceipt) {
     );
   };
 
-  const line = (
-    y: number,
-    width = 0.5,
-    gray = 0.82,
-  ) => commands.push(`${gray} G ${width} w ${LEFT} ${y} m ${RIGHT} ${y} l S`);
+  const line = (x1: number, y1: number, x2: number, y2: number, width = 0.5, gray = 0.84) => {
+    commands.push(`${gray} G ${width} w ${x1} ${y1} m ${x2} ${y2} l S`);
+  };
 
-  commands.push(`1 1 1 rg 0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT} re f`);
-  commands.push(`0 0 0 rg 0 372 ${PAGE_WIDTH} 48 re f`);
+  const roundedRect = (x: number, y: number, width: number, height: number, radius: number, fillGray: number, strokeGray?: number) => {
+    const k = 0.5522848;
+    const right = x + width;
+    const top = y + height;
+    commands.push(
+      `${fillGray} g`,
+      `${x + radius} ${y} m`,
+      `${right - radius} ${y} l`,
+      `${right - radius + radius * k} ${y} ${right} ${y + radius - radius * k} ${right} ${y + radius} c`,
+      `${right} ${top - radius} l`,
+      `${right} ${top - radius + radius * k} ${right - radius + radius * k} ${top} ${right - radius} ${top} c`,
+      `${x + radius} ${top} l`,
+      `${x + radius - radius * k} ${top} ${x} ${top - radius + radius * k} ${x} ${top - radius} c`,
+      `${x} ${y + radius} l`,
+      `${x} ${y + radius - radius * k} ${x + radius - radius * k} ${y} ${x + radius} ${y} c`,
+      strokeGray === undefined ? "f" : `${strokeGray} G 0.6 w B`,
+    );
+  };
 
-  text(LEFT, 390, 19, "VISR", "F2", 1);
-  text(LEFT, 351, 8, "ORDER SUMMARY", "F2");
-  text(LEFT, 337, 7, truncate(receipt.orderNumber, 38), "F2", 0.12);
-  text(220, 351, 7, "PAID", "F2", 0.18);
-  line(322);
+  // Vector VISR wordmark. Drawn as graphic paths instead of a text glyph.
+  const drawVisrWordmark = (x: number, y: number, scale = 1) => {
+    const w = 1.8 * scale;
+    const h = 13 * scale;
+    const gap = 4 * scale;
+    const letter = 11 * scale;
+    commands.push("1 G", `${w} w`, "1 J", "1 j");
 
-  text(LEFT, 307, 6, "CUSTOMER", "F2", 0.42);
-  text(LEFT, 294, 8, truncate(receipt.customerName, 38), "F2");
-  text(LEFT, 281, 7, truncate(receipt.email || receipt.whatsapp, 44), "F1", 0.28);
-  text(LEFT, 268, 7, truncate(`${receipt.city}, ${receipt.province} ${receipt.postalCode}`, 44), "F1", 0.28);
+    // V
+    line(x, y + h, x + letter / 2, y, w, 1);
+    line(x + letter / 2, y, x + letter, y + h, w, 1);
+    x += letter + gap;
+    // I
+    line(x + letter / 2, y, x + letter / 2, y + h, w, 1);
+    x += letter + gap;
+    // S
+    commands.push(
+      `1 G ${w} w ${x + letter} ${y + h} m ${x + 2} ${y + h} l ${x} ${y + h - 2} l ${x} ${y + h / 2 + 1} l ${x + letter} ${y + h / 2 - 1} l ${x + letter} ${y + 2} l ${x + letter - 2} ${y} l ${x} ${y} l S`,
+    );
+    x += letter + gap;
+    // R
+    line(x, y, x, y + h, w, 1);
+    line(x, y + h, x + letter - 2, y + h, w, 1);
+    line(x + letter - 2, y + h, x + letter, y + h - 2, w, 1);
+    line(x + letter, y + h - 2, x + letter, y + h / 2 + 2, w, 1);
+    line(x + letter, y + h / 2 + 2, x + letter - 2, y + h / 2, w, 1);
+    line(x + letter - 2, y + h / 2, x, y + h / 2, w, 1);
+    line(x + letter / 2, y + h / 2, x + letter, y, w, 1);
+  };
 
-  text(170, 307, 6, "PAID AT", "F2", 0.42);
-  text(170, 294, 7, truncate(formatPaidAt(receipt.paidAt), 27));
-  line(250);
+  commands.push(`0.965 g 0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT} re f`);
 
-  text(LEFT, 236, 6, "ITEM", "F2", 0.42);
-  text(220, 236, 6, "AMOUNT", "F2", 0.42);
-  line(228);
+  // Header block.
+  commands.push(`0 g 0 324 ${PAGE_WIDTH} 96 re f`);
+  drawVisrWordmark(LEFT, 382, 1.05);
+  text(LEFT, 354, 5.5, "PAYMENT RECEIPT", "F2", 0.58);
+  text(LEFT, 337, 8, truncate(receipt.orderNumber, 40), "F2", 1);
+  roundedRect(230, 382, 46, 18, 9, 1);
+  text(243, 388, 6, "PAID", "F2", 0);
 
-  let y = 213;
-  for (const item of receipt.items.slice(0, 6)) {
+  // Hero amount.
+  text(LEFT, 303, 5.5, "TOTAL PAID", "F2", 0.52);
+  text(LEFT, 279, 22, formatRupiah(receipt.totalIdr), "F2", 0.02);
+  text(LEFT, 263, 6, formatPaidAt(receipt.paidAt), "F1", 0.42);
+
+  // Customer card.
+  roundedRect(LEFT, 202, CONTENT_WIDTH, 47, 8, 1, 0.88);
+  text(LEFT + 12, 234, 5.5, "CUSTOMER", "F2", 0.5);
+  text(LEFT + 12, 220, 8, truncate(receipt.customerName, 36), "F2", 0.04);
+  text(LEFT + 12, 208, 6, truncate(receipt.email || receipt.whatsapp, 50), "F1", 0.38);
+  text(174, 220, 6, truncate(`${receipt.city}, ${receipt.province}`, 30), "F1", 0.25);
+  text(174, 208, 6, receipt.postalCode, "F1", 0.5);
+
+  // Items heading.
+  text(LEFT, 185, 5.5, "ORDER DETAILS", "F2", 0.48);
+  text(226, 185, 5.5, "AMOUNT", "F2", 0.48);
+  line(LEFT, 179, RIGHT, 179, 0.6, 0.78);
+
+  let y = 165;
+  const visibleItems = receipt.items.slice(0, 5);
+  for (const item of visibleItems) {
     const itemName = item.variant ? `${item.name} - ${item.variant}` : item.name;
-    text(LEFT, y, 7, truncate(`${itemName} x${item.quantity}`, 35));
-    text(220, y, 7, formatRupiah(item.lineTotalIdr));
-    y -= 18;
+    text(LEFT, y, 7, truncate(itemName, 34), "F2", 0.08);
+    text(LEFT, y - 10, 5.5, `Quantity ${item.quantity}`, "F1", 0.5);
+    text(226, y, 7, formatRupiah(item.lineTotalIdr), "F2", 0.08);
+    y -= 26;
   }
 
-  line(y + 6);
-  y -= 10;
-  text(150, y, 7, "Subtotal", "F1", 0.35);
-  text(220, y, 7, formatRupiah(receipt.subtotalIdr));
-  y -= 16;
-  text(150, y, 7, "Shipping", "F1", 0.35);
-  text(220, y, 7, formatRupiah(receipt.shippingCostIdr));
-  y -= 18;
-  line(y + 8, 0.7, 0.2);
-  text(150, y - 5, 8, "TOTAL", "F2");
-  text(220, y - 5, 9, formatRupiah(receipt.totalIdr), "F2");
+  if (receipt.items.length > visibleItems.length) {
+    text(LEFT, y + 4, 5.5, `+ ${receipt.items.length - visibleItems.length} more item(s)`, "F1", 0.5);
+    y -= 12;
+  }
 
-  text(LEFT, 48, 7, "Thank you.", "F2", 0.18);
-  text(LEFT, 35, 7, "Engineered to Display.", "F1", 0.42);
-  text(LEFT, 20, 5.5, "Payment receipt - not a tax invoice | visr.works", "F1", 0.58);
+  const totalsTop = Math.max(66, y + 3);
+  line(LEFT, totalsTop, RIGHT, totalsTop, 0.6, 0.78);
+  text(166, totalsTop - 15, 6, "Subtotal", "F1", 0.42);
+  text(226, totalsTop - 15, 6, formatRupiah(receipt.subtotalIdr), "F1", 0.15);
+  text(166, totalsTop - 28, 6, "Shipping", "F1", 0.42);
+  text(226, totalsTop - 28, 6, formatRupiah(receipt.shippingCostIdr), "F1", 0.15);
+
+  // Footer lockup.
+  commands.push(`0 g 0 0 ${PAGE_WIDTH} 50 re f`);
+  text(LEFT, 29, 8, "Thank you.", "F2", 1);
+  text(LEFT, 16, 6.5, "Carry Your Build.", "F1", 0.7);
+  text(190, 17, 5, "visr.works", "F2", 0.7);
+  text(190, 8, 4.5, "Payment receipt - not a tax invoice", "F1", 0.52);
 
   const stream = commands.join("\n");
   const objects = [
