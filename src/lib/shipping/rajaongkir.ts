@@ -101,6 +101,7 @@ export async function calculateDomesticRates(input: {
   destinationId: number;
   weightGrams: number;
   couriers: string[];
+  orderSubtotalIdr: number;
 }) {
   const body = new URLSearchParams({
     origin: String(input.originId),
@@ -129,7 +130,7 @@ export async function calculateDomesticRates(input: {
   }>>>(response, "domestic-rate");
 
   return (payload.data ?? []).map((item) => {
-    const shipping = calculateShippingDiscount(Number(item.cost));
+    const shipping = calculateShippingDiscount(Number(item.cost), input.orderSubtotalIdr);
 
     return {
       courierName: item.name,
