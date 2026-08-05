@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 const faqItems = [
   {
@@ -70,47 +70,21 @@ const faqItems = [
   },
 ] as const;
 
-const COLLAPSED_FOOTER_CLASS = "visr-footer-collapsed";
 const quickSupportLinkClass =
   "text-xs text-white/52 transition-colors duration-300 hover:text-white";
 
 export function VisrFaq() {
   const [open, setOpen] = useState(false);
-  const sectionRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (window.location.hash === "#faq") setOpen(true);
   }, []);
 
-  useEffect(() => {
-    const footer = sectionRef.current?.nextElementSibling;
-    if (!(footer instanceof HTMLElement) || footer.tagName !== "FOOTER") return;
-
-    footer.classList.toggle(COLLAPSED_FOOTER_CLASS, !open);
-    return () => footer.classList.remove(COLLAPSED_FOOTER_CLASS);
-  }, [open]);
-
   return (
     <section
       id="faq"
-      ref={sectionRef}
       className="border-t border-white/[0.07] bg-[#030303]"
     >
-      <style>{`
-        footer.${COLLAPSED_FOOTER_CLASS} > .visr-container {
-          padding-top: 1.5rem;
-          padding-bottom: 1.5rem;
-        }
-
-        footer.${COLLAPSED_FOOTER_CLASS} > .visr-container > :first-child {
-          display: none;
-        }
-
-        footer.${COLLAPSED_FOOTER_CLASS} > .visr-container > :last-child {
-          padding-top: 0;
-        }
-      `}</style>
-
       <div className="visr-container">
         <button
           type="button"
