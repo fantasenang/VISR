@@ -26,16 +26,15 @@ export function FooterTagline() {
   return (
     <h2
       ref={ref}
-      className="mt-6 max-w-none overflow-hidden text-[clamp(3.4rem,7vw,7.5rem)] font-normal leading-[0.88] tracking-[-0.065em]"
+      className="mt-6 max-w-none overflow-hidden text-[clamp(2.35rem,10vw,7.5rem)] font-normal leading-[0.92] tracking-[-0.065em]"
       aria-label="Carry Your Build."
     >
-      <span className="block whitespace-nowrap">Carry Your</span>
       <span className="relative block w-fit whitespace-nowrap">
-        Build.
+        Carry Your Build.
         <span
           aria-hidden="true"
-          className={`pointer-events-none absolute inset-y-[-8%] left-[-35%] w-[28%] skew-x-[-18deg] bg-gradient-to-r from-transparent via-white/28 to-transparent blur-[1px] transition-transform duration-[1200ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:hidden ${
-            revealed ? "translate-x-[520%]" : "translate-x-0"
+          className={`pointer-events-none absolute inset-y-[-8%] left-[-30%] w-[22%] skew-x-[-18deg] bg-gradient-to-r from-transparent via-white/28 to-transparent blur-[1px] transition-transform duration-[1400ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:hidden ${
+            revealed ? "translate-x-[650%]" : "translate-x-0"
           }`}
         />
       </span>
