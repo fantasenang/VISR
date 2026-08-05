@@ -70,9 +70,6 @@ const faqItems = [
   },
 ] as const;
 
-const quickSupportLinkClass =
-  "text-xs text-white/52 transition-colors duration-300 hover:text-white";
-
 export function VisrFaq() {
   const [open, setOpen] = useState(false);
 
@@ -81,10 +78,7 @@ export function VisrFaq() {
   }, []);
 
   return (
-    <section
-      id="faq"
-      className="border-t border-white/[0.07] bg-[#030303]"
-    >
+    <section id="faq" className="border-t border-white/[0.07] bg-[#030303]">
       <div className="visr-container">
         <button
           type="button"
@@ -109,23 +103,6 @@ export function VisrFaq() {
             </span>
           </span>
         </button>
-
-        {!open ? (
-          <nav
-            aria-label="Quick customer support"
-            className="flex flex-wrap items-center gap-x-6 gap-y-3 border-t border-white/[0.07] py-4"
-          >
-            <a href="/order" className={quickSupportLinkClass}>
-              Track Your Order
-            </a>
-            <a
-              href="https://wa.me/6281806288892"
-              className={quickSupportLinkClass}
-            >
-              WhatsApp Support
-            </a>
-          </nav>
-        ) : null}
 
         {open ? (
           <div
