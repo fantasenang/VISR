@@ -1,4 +1,5 @@
 import { VisrFaq } from "@/components/content/visr-faq";
+import { FooterTagline } from "@/components/content/footer-tagline";
 import { LinkStockStatus } from "@/components/commerce/link-stock-status";
 import { PreorderCta } from "@/components/commerce/preorder-cta";
 import { PreorderSummary } from "@/components/commerce/preorder-summary";
@@ -113,9 +114,7 @@ export default async function HomePage() {
             <div className="grid gap-14 border-b border-white/10 pb-14 md:grid-cols-12 md:pb-20">
               <div className="md:col-span-6">
                 <p className="visr-label text-white/35">VISR</p>
-                <h2 className="mt-6 max-w-[8ch] text-[clamp(3.4rem,7vw,7.5rem)] font-normal leading-[0.88] tracking-[-0.06em]">
-                  Carry Your Build.
-                </h2>
+                <FooterTagline />
                 <p className="mt-8 max-w-md text-sm leading-7 text-white/42">
                   A handmade magnetic display system for collectors who want the car—not the frame—to remain the hero.
                 </p>
