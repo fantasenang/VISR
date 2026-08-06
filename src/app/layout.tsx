@@ -9,6 +9,12 @@ import { PrivacyConsent } from "@/components/privacy/privacy-consent";
 import "./globals.css";
 import "./ios-form-controls.css";
 
+const SITE_URL = "https://visr.works";
+const SITE_TITLE = "VISR — Carry Your Build";
+const SITE_DESCRIPTION =
+  "Handmade magnetic display systems for 1:64 diecast collectors. Discover VISR Carry, VISR Link, and the VISR display ecosystem.";
+const SHARE_IMAGE = "/media/phase-16/visr-c01.jpg";
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -25,23 +31,60 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
+  applicationName: "VISR",
   title: {
-    default: "VISR — Carry Your Build",
+    default: SITE_TITLE,
     template: "%s — VISR",
   },
-  description:
-    "Carry Your Build. A magnetic diecast display system created around the collection, not the frame.",
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
+  description: SITE_DESCRIPTION,
+  keywords: [
+    "VISR",
+    "VISR Carry",
+    "VISR Link",
+    "diecast display",
+    "1:64 diecast display",
+    "magnetic diecast display",
+    "display diecast Indonesia",
+  ],
+  authors: [{ name: "VISR", url: SITE_URL }],
+  creator: "VISR",
+  publisher: "VISR",
+  category: "Diecast display systems",
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
   openGraph: {
-    title: "VISR — Carry Your Build",
-    description: "Carry Your Build. Designed around the collection, not the frame.",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    url: SITE_URL,
+    siteName: "VISR",
+    locale: "en_ID",
     type: "website",
+    images: [
+      {
+        url: SHARE_IMAGE,
+        alt: "VISR Carry magnetic display system for 1:64 diecast",
+      },
+    ],
   },
   twitter: {
-    card: "summary",
-    title: "VISR — Carry Your Build",
-    description: "Carry Your Build. Designed around the collection, not the frame.",
+    card: "summary_large_image",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    images: [SHARE_IMAGE],
   },
+  verification: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION
+    ? { google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION }
+    : undefined,
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
