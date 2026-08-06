@@ -69,7 +69,7 @@
 }
 
 .e01 .image {
-  object-position: 50% 57%;
+  object-position: 50% 66%;
 }
 
 .e02 .image {
@@ -89,7 +89,9 @@
 
 .e05 .image {
   object-fit: contain;
-  object-position: 50% 50%;
+  object-position: 50% 32%;
+  transform: translateY(-8%) scale(0.72);
+  transform-origin: 50% 32%;
 }
 
 .imageTreatment {
