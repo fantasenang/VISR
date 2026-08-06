@@ -166,19 +166,21 @@ export default function QrisPaymentClient({
           </div>
 
           <div className="grid gap-9 p-6 md:grid-cols-[minmax(0,1fr)_minmax(260px,0.82fr)] md:p-9">
-            <div>
-              <div className="mx-auto w-full max-w-[17rem] rounded-[1.35rem] bg-white p-3.5 md:max-w-none md:p-5">
-                <Image
-                  src="/api/payments/qris/image?mode=inline"
-                  alt="VISR BCA QRIS payment code"
-                  width={915}
-                  height={915}
-                  unoptimized
-                  priority
-                  className="aspect-square w-full object-contain"
-                />
+            <div className="flex min-w-0 flex-col items-center">
+              <div className="flex w-full justify-center">
+                <div className="w-full max-w-[15.5rem] rounded-[1.35rem] bg-white p-3.5 md:max-w-none md:p-5">
+                  <Image
+                    src="/api/payments/qris/image?mode=inline"
+                    alt="VISR BCA QRIS payment code"
+                    width={915}
+                    height={915}
+                    unoptimized
+                    priority
+                    className="aspect-square w-full object-contain"
+                  />
+                </div>
               </div>
-              <div className="mx-auto mt-4 grid w-full max-w-[17rem] grid-cols-2 gap-3 md:max-w-none">
+              <div className="mt-4 grid w-full max-w-[15.5rem] grid-cols-2 gap-3 md:max-w-none">
                 <a href="/api/payments/qris/image" download="VISR-QRIS-BCA.png" className="rounded-full border border-white/15 px-3 py-3 text-center text-xs transition hover:bg-white hover:text-black md:text-sm">Download QRIS</a>
                 <a href="/api/payments/qris/image?mode=inline" target="_blank" rel="noreferrer" className="rounded-full border border-white/15 px-3 py-3 text-center text-xs transition hover:bg-white hover:text-black md:text-sm">Open Fullscreen</a>
               </div>
