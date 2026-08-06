@@ -15,6 +15,34 @@ const SITE_DESCRIPTION =
   "Handmade magnetic display systems for 1:64 diecast collectors. Discover VISR Carry, VISR Link, and the VISR display ecosystem.";
 const SHARE_IMAGE = "/media/phase-16/visr-c01.jpg";
 
+const structuredData = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": `${SITE_URL}/#organization`,
+      name: "VISR",
+      url: SITE_URL,
+      description:
+        "VISR creates handmade magnetic display systems for 1:64 diecast collectors.",
+      address: {
+        "@type": "PostalAddress",
+        addressLocality: "Bandung",
+        addressCountry: "ID",
+      },
+    },
+    {
+      "@type": "WebSite",
+      "@id": `${SITE_URL}/#website`,
+      url: SITE_URL,
+      name: "VISR",
+      description: SITE_DESCRIPTION,
+      publisher: { "@id": `${SITE_URL}/#organization` },
+      inLanguage: "en-ID",
+    },
+  ],
+};
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -38,6 +66,9 @@ export const metadata: Metadata = {
     template: "%s — VISR",
   },
   description: SITE_DESCRIPTION,
+  alternates: {
+    canonical: SITE_URL,
+  },
   keywords: [
     "VISR",
     "VISR Carry",
@@ -91,6 +122,12 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
       <body className="visr-grain antialiased">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(structuredData).replace(/</g, "\\u003c"),
+          }}
+        />
         {children}
         <ProductNameNormalizer />
         <MetaPixelTracker />
