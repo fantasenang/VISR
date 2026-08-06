@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { consumeDistributedRateLimit } from "@/lib/security/distributed-rate-limit";
 
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9._:-]{8,128}$/;
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -7,11 +8,10 @@ const MAX_JSON_BODY_BYTES = 64 * 1024;
 const MAX_PAYMENT_PROOF_BODY_BYTES = 4_500_000;
 const QRIS_PROOF_UPLOAD_PATH = "/api/payments/qris/proof";
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
-const ORIGIN_EXEMPT_PATHS = new Set([
-  "/api/payments/midtrans/webhook",
-]);
+const ORIGIN_EXEMPT_PATHS = new Set(["/api/payments/midtrans/webhook"]);
 
 type RateLimitPolicy = { name: string; limit: number };
+type RateLimitResult = { allowed: boolean; remaining: number; resetAt: number };
 type RateLimitBucket = { count: number; resetAt: number };
 const rateLimitBuckets = new Map<string, RateLimitBucket>();
 
@@ -27,10 +27,7 @@ function resolveClientAddress(request: NextRequest) {
 }
 
 function apiError(requestId: string, code: string, message: string, status: number) {
-  const response = NextResponse.json(
-    { error: { code, message }, requestId },
-    { status },
-  );
+  const response = NextResponse.json({ error: { code, message }, requestId }, { status });
   response.headers.set("x-request-id", requestId);
   response.headers.set("Cache-Control", "no-store, max-age=0");
   return response;
@@ -76,16 +73,11 @@ function allowedOrigins(request: NextRequest) {
 function hasValidBrowserOrigin(request: NextRequest) {
   if (!MUTATING_METHODS.has(request.method)) return true;
   if (ORIGIN_EXEMPT_PATHS.has(request.nextUrl.pathname)) return true;
-
   const origin = request.headers.get("origin");
   const fetchSite = request.headers.get("sec-fetch-site");
-
-  // Non-browser/server-to-server clients commonly omit Origin and Sec-Fetch-Site.
-  // Browser requests must be same-origin/same-site and use an explicitly allowed origin.
   if (!origin && !fetchSite) return true;
   if (!origin) return false;
   if (fetchSite && !["same-origin", "same-site", "none"].includes(fetchSite)) return false;
-
   try {
     return allowedOrigins(request).has(new URL(origin).origin);
   } catch {
@@ -121,6 +113,7 @@ function hasSupportedContentType(request: NextRequest) {
 function resolveRateLimitPolicy(pathname: string, method: string): RateLimitPolicy | null {
   if (method === "OPTIONS" || pathname === "/api/health") return null;
   if (pathname === "/api/payments/midtrans/webhook") return null;
+  if (pathname.includes("auth/login")) return { name: "admin-login", limit: 5 };
   if (pathname.includes("lookup") || pathname.includes("tracking")) return { name: "tracking", limit: 12 };
   if (pathname.includes("shipping")) return { name: "shipping", limit: 40 };
   if (pathname.includes("reservation") || pathname.includes("reserve") || pathname === "/api/orders") return { name: "reservation", limit: 10 };
@@ -129,7 +122,7 @@ function resolveRateLimitPolicy(pathname: string, method: string): RateLimitPoli
   return { name: "api-read", limit: 120 };
 }
 
-function consumeRateLimit(key: string, limit: number, now: number) {
+function consumeLocalRateLimit(key: string, limit: number, now: number): RateLimitResult {
   const existing = rateLimitBuckets.get(key);
   if (!existing || existing.resetAt <= now) {
     const bucket = { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS };
@@ -152,13 +145,28 @@ function pruneRateLimitBuckets(now: number) {
   }
 }
 
-function applyRateLimitHeaders(response: NextResponse, policy: RateLimitPolicy, remaining: number, resetAt: number) {
+function applyRateLimitHeaders(response: NextResponse, policy: RateLimitPolicy, result: RateLimitResult) {
   response.headers.set("RateLimit-Limit", String(policy.limit));
-  response.headers.set("RateLimit-Remaining", String(remaining));
-  response.headers.set("RateLimit-Reset", String(Math.ceil(resetAt / 1000)));
+  response.headers.set("RateLimit-Remaining", String(result.remaining));
+  response.headers.set("RateLimit-Reset", String(Math.ceil(result.resetAt / 1000)));
 }
 
-export function proxy(request: NextRequest) {
+async function rateLimit(request: NextRequest, policy: RateLimitPolicy, requestId: string) {
+  const identity = `${policy.name}:${resolveClientAddress(request)}`;
+  try {
+    return await consumeDistributedRateLimit(identity, policy.limit, 60);
+  } catch (error) {
+    const now = Date.now();
+    pruneRateLimitBuckets(now);
+    logSecurityEvent("ERROR", "DISTRIBUTED_RATE_LIMIT_FALLBACK", request, requestId, {
+      policy: policy.name,
+      message: error instanceof Error ? error.message : "UNKNOWN_ERROR",
+    });
+    return consumeLocalRateLimit(identity, policy.limit, now);
+  }
+}
+
+export async function proxy(request: NextRequest) {
   const requestId = resolveRequestId(request);
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-request-id", requestId);
@@ -188,30 +196,23 @@ export function proxy(request: NextRequest) {
   }
 
   const policy = resolveRateLimitPolicy(request.nextUrl.pathname, request.method);
-  let rateLimitResult: ReturnType<typeof consumeRateLimit> | null = null;
-
-  if (policy) {
-    const now = Date.now();
-    pruneRateLimitBuckets(now);
-    const bucketKey = `${policy.name}:${resolveClientAddress(request)}`;
-    rateLimitResult = consumeRateLimit(bucketKey, policy.limit, now);
-    if (!rateLimitResult.allowed) {
-      const retryAfterSeconds = Math.max(1, Math.ceil((rateLimitResult.resetAt - now) / 1000));
-      logSecurityEvent("WARN", "API_RATE_LIMIT_REJECTED", request, requestId, {
-        policy: policy.name,
-        limit: policy.limit,
-        retryAfterSeconds,
-      });
-      const response = apiError(requestId, "RATE_LIMITED", "Too many requests. Try again later.", 429);
-      response.headers.set("Retry-After", String(retryAfterSeconds));
-      applyRateLimitHeaders(response, policy, rateLimitResult.remaining, rateLimitResult.resetAt);
-      return response;
-    }
+  const rateLimitResult = policy ? await rateLimit(request, policy, requestId) : null;
+  if (policy && rateLimitResult && !rateLimitResult.allowed) {
+    const retryAfterSeconds = Math.max(1, Math.ceil((rateLimitResult.resetAt - Date.now()) / 1000));
+    logSecurityEvent("WARN", "API_RATE_LIMIT_REJECTED", request, requestId, {
+      policy: policy.name,
+      limit: policy.limit,
+      retryAfterSeconds,
+    });
+    const response = apiError(requestId, "RATE_LIMITED", "Too many requests. Try again later.", 429);
+    response.headers.set("Retry-After", String(retryAfterSeconds));
+    applyRateLimitHeaders(response, policy, rateLimitResult);
+    return response;
   }
 
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set("x-request-id", requestId);
-  if (policy && rateLimitResult) applyRateLimitHeaders(response, policy, rateLimitResult.remaining, rateLimitResult.resetAt);
+  if (policy && rateLimitResult) applyRateLimitHeaders(response, policy, rateLimitResult);
   return response;
 }
 

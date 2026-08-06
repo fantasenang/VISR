@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { consumePaymentAccess } from "@/lib/commerce/payment-access";
 import {
   isPreorderPreviewOverride,
   wasCreatedDuringOfficialPreorder,
@@ -61,22 +62,9 @@ async function createSnapToken(
 
   const officialPreorderOrder = wasCreatedDuringOfficialPreorder(order.created_at);
   if (!officialPreorderOrder && !allowPreviewOrder) {
-    logger.warn("MIDTRANS_ORDER_NOT_PREORDER_ELIGIBLE", {
-      requestId,
-      orderId,
-      orderNumber: order.order_number,
-      createdAt: order.created_at,
-      durationMs: elapsedMs(startedAt),
-    });
-    return {
-      status: 403,
-      body: failure(
-        "ORDER_NOT_PREORDER_ELIGIBLE",
-        "This order is not eligible for public payment.",
-      ),
-    };
+    logger.warn("MIDTRANS_ORDER_NOT_PREORDER_ELIGIBLE", { requestId, orderId, orderNumber: order.order_number, createdAt: order.created_at, durationMs: elapsedMs(startedAt) });
+    return { status: 403, body: failure("ORDER_NOT_PREORDER_ELIGIBLE", "This order is not eligible for public payment.") };
   }
-
   if (order.payment_status !== "pending") return { status: 409, body: failure("ORDER_NOT_PAYABLE", "This order is no longer payable.") };
   if (new Date(order.payment_expires_at).getTime() <= Date.now()) return { status: 409, body: failure("ORDER_EXPIRED", "The payment window for this order has expired.") };
 
@@ -141,17 +129,28 @@ export async function POST(request: Request) {
     return apiError(requestId, "INVALID_PAYMENT_REQUEST", "A valid order ID is required.", 400, parsed.error.flatten());
   }
 
+  try {
+    const access = await consumePaymentAccess(parsed.data.orderId);
+    if (!access.allowed) {
+      logger.warn("PAYMENT_ACCESS_REJECTED", { requestId, orderId: parsed.data.orderId });
+      return apiError(requestId, "PAYMENT_ACCESS_REQUIRED", "This payment link is invalid or has expired.", 401);
+    }
+  } catch (error) {
+    logger.error("PAYMENT_ACCESS_CHECK_FAILED", {
+      requestId,
+      orderId: parsed.data.orderId,
+      message: error instanceof Error ? error.message : "UNKNOWN_ERROR",
+    });
+    return apiError(requestId, "PAYMENT_ACCESS_UNAVAILABLE", "Payment security validation is unavailable.", 503);
+  }
+
   const allowPreviewOrder = await isPreorderPreviewOverride();
   const now = Date.now();
   pruneSnapCache(now);
   const cacheKey = `${parsed.data.orderId}:${allowPreviewOrder ? "preview" : "public"}`;
   const existing = snapCache.get(cacheKey);
   const replayed = Boolean(existing);
-  const promise = existing?.promise ?? createSnapToken(
-    parsed.data.orderId,
-    requestId,
-    allowPreviewOrder,
-  );
+  const promise = existing?.promise ?? createSnapToken(parsed.data.orderId, requestId, allowPreviewOrder);
 
   if (!existing) {
     snapCache.set(cacheKey, { expiresAt: now + SNAP_CACHE_TTL_MS, promise });

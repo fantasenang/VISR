@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { sanitizePaymentProofImage } from "@/lib/commerce/image-sanitizer";
 import {
   QRIS_PAYMENT_PROOF_MAX_BYTES,
   QRIS_PAYMENT_PROOF_MIME_TYPES,
@@ -12,6 +13,7 @@ import {
 import { verifyQrisOrderToken } from "@/lib/commerce/qris-manual";
 
 const ORDER_PATTERN = /^VISR\.B\d{2}\.\d{8}\.\d{3,}$/;
+const PROOF_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 type OrderRow = {
   id: string;
@@ -25,11 +27,6 @@ function json(body: unknown, status = 200) {
     status,
     headers: { "Cache-Control": "no-store, max-age=0" },
   });
-}
-
-function cleanFileName(value: string) {
-  const cleaned = value.replace(/[^A-Za-z0-9._ ()-]/g, "_").slice(0, 160).trim();
-  return cleaned || "payment-proof";
 }
 
 export async function POST(request: Request) {
@@ -55,9 +52,24 @@ export async function POST(request: Request) {
     return json({ error: { code: "INVALID_PROOF_SIZE", message: "Payment proof must be 4 MB or smaller." } }, 413);
   }
 
-  const proofBytes = new Uint8Array(await proof.arrayBuffer());
-  if (!validQrisProofSignature(proofBytes, proof.type)) {
+  const originalBytes = new Uint8Array(await proof.arrayBuffer());
+  if (!validQrisProofSignature(originalBytes, proof.type)) {
     return json({ error: { code: "INVALID_PROOF_FILE", message: "The uploaded file is not a valid image." } }, 415);
+  }
+
+  let sanitized: Awaited<ReturnType<typeof sanitizePaymentProofImage>>;
+  try {
+    sanitized = await sanitizePaymentProofImage(originalBytes, proof.name);
+  } catch (error) {
+    console.warn(JSON.stringify({
+      event: "QRIS_PAYMENT_PROOF_SANITIZATION_REJECTED",
+      orderNumber,
+      message: error instanceof Error ? error.message : "UNKNOWN_ERROR",
+    }));
+    return json(
+      { error: { code: "INVALID_PROOF_IMAGE", message: "The image could not be safely processed. Use a normal JPG or PNG screenshot." } },
+      415,
+    );
   }
 
   const { url, serviceRoleKey } = qrisProofConfig();
@@ -74,10 +86,13 @@ export async function POST(request: Request) {
       return json({ error: { code: "ORDER_EXPIRED", message: "The payment reservation has expired." } }, 409);
     }
 
-    const storagePath = `${order.id}/proof`;
+    const storageExtension = sanitized.mimeType === "image/png" ? "png" : "jpg";
+    const storagePath = `${order.id}/proof.${storageExtension}`;
+    const uploadArrayBuffer = new ArrayBuffer(sanitized.bytes.byteLength);
+    new Uint8Array(uploadArrayBuffer).set(sanitized.bytes);
     const uploadBody = new FormData();
     uploadBody.append("cacheControl", "0");
-    uploadBody.append("", new Blob([proofBytes], { type: proof.type }), cleanFileName(proof.name));
+    uploadBody.append("", new Blob([uploadArrayBuffer], { type: sanitized.mimeType }), sanitized.fileName);
 
     const storageResponse = await fetch(qrisProofStorageUrl(url, storagePath), {
       method: "POST",
@@ -94,43 +109,48 @@ export async function POST(request: Request) {
     }
 
     const uploadedAt = new Date().toISOString();
-    const proofResponse = await fetch(
-      `${url}/rest/v1/qris_payment_proofs?on_conflict=order_id`,
-      {
-        method: "POST",
-        headers: qrisProofJsonHeaders(serviceRoleKey, "resolution=merge-duplicates,return=representation"),
-        body: JSON.stringify({
-          order_id: order.id,
-          storage_path: storagePath,
-          original_name: cleanFileName(proof.name),
-          mime_type: proof.type,
-          byte_size: proof.size,
-          uploaded_at: uploadedAt,
-          used_at: null,
-          updated_at: uploadedAt,
-        }),
-        cache: "no-store",
-      },
-    );
+    const deleteAfter = new Date(Date.now() + PROOF_RETENTION_MS).toISOString();
+    const proofResponse = await fetch(`${url}/rest/v1/qris_payment_proofs?on_conflict=order_id`, {
+      method: "POST",
+      headers: qrisProofJsonHeaders(serviceRoleKey, "resolution=merge-duplicates,return=representation"),
+      body: JSON.stringify({
+        order_id: order.id,
+        storage_path: storagePath,
+        original_name: sanitized.fileName,
+        mime_type: sanitized.mimeType,
+        byte_size: sanitized.bytes.byteLength,
+        uploaded_at: uploadedAt,
+        used_at: null,
+        sanitized_at: uploadedAt,
+        pixel_width: sanitized.width,
+        pixel_height: sanitized.height,
+        content_sha256: sanitized.sha256,
+        delete_after: deleteAfter,
+        updated_at: uploadedAt,
+      }),
+      cache: "no-store",
+    });
     if (!proofResponse.ok) throw new Error("QRIS_PROOF_RECORD_WRITE_FAILED");
     const savedProof = ((await proofResponse.json()) as QrisPaymentProofRow[])[0];
     if (!savedProof) throw new Error("QRIS_PROOF_RECORD_MISSING");
 
     console.info(JSON.stringify({
-      event: "QRIS_PAYMENT_PROOF_UPLOADED",
+      event: "QRIS_PAYMENT_PROOF_SANITIZED_AND_UPLOADED",
       orderId: order.id,
       orderNumber: order.order_number,
       proofId: savedProof.id,
-      mimeType: proof.type,
-      byteSize: proof.size,
+      originalMimeType: proof.type,
+      originalByteSize: proof.size,
+      storedMimeType: sanitized.mimeType,
+      storedByteSize: sanitized.bytes.byteLength,
+      pixelWidth: sanitized.width,
+      pixelHeight: sanitized.height,
+      contentSha256: sanitized.sha256,
+      deleteAfter,
       uploadedAt,
     }));
 
-    return json({
-      uploaded: true,
-      proofId: savedProof.id,
-      fileName: savedProof.original_name,
-    });
+    return json({ uploaded: true, proofId: savedProof.id, fileName: savedProof.original_name });
   } catch (error) {
     console.error(JSON.stringify({
       event: "QRIS_PAYMENT_PROOF_UPLOAD_FAILED",
