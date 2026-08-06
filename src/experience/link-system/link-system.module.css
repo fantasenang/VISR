@@ -70,6 +70,7 @@
 
 .e01 .image {
   object-position: 50% 66%;
+  transform: translateY(8%);
 }
 
 .e02 .image {
