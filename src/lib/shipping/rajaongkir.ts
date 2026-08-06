@@ -1,6 +1,13 @@
 import { calculateShippingDiscount } from "@/lib/shipping";
 
 const BASE_URL = "https://rajaongkir.komerce.id/api/v1";
+const DEFAULT_ORIGIN_ID = 5126;
+
+// VISR ships from Sukamukti, Katapang, Bandung 40921.
+// Keep the Vercel environment variable authoritative when explicitly configured.
+if (!process.env.RAJAONGKIR_ORIGIN_ID) {
+  process.env.RAJAONGKIR_ORIGIN_ID = String(DEFAULT_ORIGIN_ID);
+}
 
 export type RajaOngkirDestination = {
   id: number;
