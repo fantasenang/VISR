@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 
 function rupiah(value: number) {
@@ -107,9 +108,13 @@ export default function QrisPaymentClient({
           <div className="grid gap-10 p-6 md:grid-cols-[minmax(0,1fr)_minmax(260px,0.82fr)] md:p-9">
             <div>
               <div className="rounded-[1.5rem] bg-white p-4 md:p-5">
-                <img
+                <Image
                   src="/api/payments/qris/image?mode=inline"
                   alt="VISR BCA QRIS payment code"
+                  width={915}
+                  height={915}
+                  unoptimized
+                  priority
                   className="aspect-square w-full object-contain"
                 />
               </div>
