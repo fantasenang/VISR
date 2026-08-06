@@ -3,32 +3,55 @@ import { z } from "zod";
 import { getAdminSession } from "@/lib/admin/auth";
 import { verifyQrisClaim } from "@/lib/admin/qris";
 
-const orderNumberSchema = z.string().trim().regex(/^VISR\.B\d{2}\.\d{8}\.\d{3,}$/);
+const schema = z.object({
+  orderNumber: z.string().trim().regex(/^VISR\.B\d{2}\.\d{8}\.\d{3,}$/),
+});
+
+function json(body: unknown, status = 200) {
+  return NextResponse.json(body, {
+    status,
+    headers: { "Cache-Control": "no-store, max-age=0" },
+  });
+}
 
 export async function POST(request: Request) {
   const session = await getAdminSession();
   if (!session) {
-    return NextResponse.redirect(new URL("/visr-control", request.url), 303);
+    return json(
+      { error: { code: "ADMIN_SESSION_REQUIRED", message: "Admin session has expired." } },
+      401,
+    );
   }
 
-  const form = await request.formData();
-  const parsed = orderNumberSchema.safeParse(form.get("orderNumber"));
+  const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.redirect(new URL("/visr-control/qris?error=invalid_order", request.url), 303);
+    return json(
+      { error: { code: "INVALID_ORDER", message: "The QRIS order number is invalid." } },
+      400,
+    );
   }
 
   try {
-    await verifyQrisClaim(parsed.data);
-    return NextResponse.redirect(
-      new URL(`/visr-control/qris?verified=${encodeURIComponent(parsed.data)}`, request.url),
-      303,
-    );
+    const result = await verifyQrisClaim(parsed.data.orderNumber);
+    return json({
+      verified: true,
+      alreadyPaid: Boolean(result && "alreadyPaid" in result && result.alreadyPaid),
+      orderNumber: parsed.data.orderNumber,
+    });
   } catch (error) {
     console.error(JSON.stringify({
       event: "QRIS_ADMIN_VERIFY_FAILED",
-      orderNumber: parsed.data,
+      orderNumber: parsed.data.orderNumber,
       message: error instanceof Error ? error.message : "UNKNOWN_ERROR",
     }));
-    return NextResponse.redirect(new URL("/visr-control/qris?error=verification_failed", request.url), 303);
+    return json(
+      {
+        error: {
+          code: "QRIS_VERIFICATION_FAILED",
+          message: "Payment verification was not applied. Refresh the queue and check the order status.",
+        },
+      },
+      409,
+    );
   }
 }
