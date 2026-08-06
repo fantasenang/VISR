@@ -6,6 +6,7 @@ import {
   qrisUniqueCode,
   verifyQrisOrderToken,
 } from "@/lib/commerce/qris-manual";
+import { sendTelegramQrisClaim } from "@/lib/notifications/telegram";
 
 const schema = z.object({
   orderNumber: z.string().trim().regex(/^VISR\.B\d{2}\.\d{8}\.\d{3,}$/),
@@ -15,6 +16,7 @@ const schema = z.object({
 type OrderRow = {
   id: string;
   order_number: string;
+  customer_name: string;
   total_idr: number;
   payment_status: string;
   payment_expires_at: string;
@@ -55,7 +57,7 @@ export async function POST(request: Request) {
 
   try {
     const orderResponse = await fetch(
-      `${url}/rest/v1/orders?select=id,order_number,total_idr,payment_status,payment_expires_at,notes&order_number=eq.${encodeURIComponent(parsed.data.orderNumber)}&limit=1`,
+      `${url}/rest/v1/orders?select=id,order_number,customer_name,total_idr,payment_status,payment_expires_at,notes&order_number=eq.${encodeURIComponent(parsed.data.orderNumber)}&limit=1`,
       { headers: headers(serviceRoleKey), cache: "no-store" },
     );
     if (!orderResponse.ok) throw new Error("QRIS_CLAIM_ORDER_READ_FAILED");
@@ -154,6 +156,28 @@ export async function POST(request: Request) {
       extendedUntil: extendedExpiry,
       claimedAt,
     }));
+
+    try {
+      const notification = await sendTelegramQrisClaim({
+        orderNumber: order.order_number,
+        customerName: order.customer_name,
+        expectedAmountIdr: amountIdr,
+        uniqueCode,
+        claimedAt,
+      });
+      console.info(JSON.stringify({
+        event: notification.sent ? "TELEGRAM_QRIS_CLAIM_SENT" : "TELEGRAM_QRIS_CLAIM_NOT_CONFIGURED",
+        orderId: order.id,
+        orderNumber: order.order_number,
+      }));
+    } catch (notificationError) {
+      console.error(JSON.stringify({
+        event: "TELEGRAM_QRIS_CLAIM_SEND_FAILED",
+        orderId: order.id,
+        orderNumber: order.order_number,
+        message: notificationError instanceof Error ? notificationError.message : "UNKNOWN_ERROR",
+      }));
+    }
 
     return NextResponse.json(
       { pendingVerification: true, extendedUntil: extendedExpiry },
