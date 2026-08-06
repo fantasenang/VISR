@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import QrisVerifyForm from "./qris-verify-form";
 import { getAdminSession } from "@/lib/admin/auth";
 import { getPendingQrisClaims } from "@/lib/admin/qris";
 
@@ -104,12 +105,10 @@ export default async function QrisVerificationPage({
                     <a href={`https://wa.me/${claim.whatsapp.replace(/\D/g, "")}`} target="_blank" rel="noreferrer" className="inline-flex text-white/72 underline decoration-white/20 underline-offset-4">Open WhatsApp</a>
                   </div>
 
-                  <form action="/api/admin/qris/verify" method="post">
-                    <input type="hidden" name="orderNumber" value={claim.orderNumber} />
-                    <button className="w-full rounded-full bg-white px-6 py-4 text-sm font-medium text-black transition hover:bg-white/85 md:w-auto">
-                      Mark Payment Verified
-                    </button>
-                  </form>
+                  <QrisVerifyForm
+                    orderNumber={claim.orderNumber}
+                    expectedAmount={rupiah(claim.expectedAmountIdr)}
+                  />
                 </div>
               </article>
             ))}
