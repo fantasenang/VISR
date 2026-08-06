@@ -2,31 +2,28 @@
 
 import { useEffect, useRef, useState } from "react";
 
-const ORDER_NUMBER_LABEL = "Your order number";
+const ORDER_NUMBER_PATTERN = /VISR\.B\d{2}\.\d{8}\.\d{3,}/;
 const STORAGE_PREFIX = "visr-order-number-saved:";
 
 function findVisibleOrderNumber() {
-  const labels = Array.from(document.querySelectorAll("p"));
-  const label = labels.find((element) => element.textContent?.trim() === ORDER_NUMBER_LABEL);
-  const value = label?.nextElementSibling?.textContent?.trim();
-
-  return value && value.length >= 4 ? value : null;
+  return document.body.innerText.match(ORDER_NUMBER_PATTERN)?.[0] ?? null;
 }
 
 export default function OrderNumberSavePrompt() {
   const [orderNumber, setOrderNumber] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const acknowledgedNumbersRef = useRef(new Set<string>());
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const detectOrderNumber = () => {
       const detected = findVisibleOrderNumber();
-      if (!detected) return;
+      if (!detected || acknowledgedNumbersRef.current.has(detected)) return;
 
       try {
         if (window.sessionStorage.getItem(`${STORAGE_PREFIX}${detected}`) === "true") return;
       } catch {
-        // The acknowledgement remains available even when storage is blocked.
+        // The in-memory acknowledgement still prevents the prompt from reopening.
       }
 
       setOrderNumber((current) => current ?? detected);
@@ -66,10 +63,13 @@ export default function OrderNumberSavePrompt() {
   const confirmSaved = () => {
     if (!orderNumber) return;
 
+    acknowledgedNumbersRef.current.add(orderNumber);
+    document.documentElement.dataset.visrSavedOrderNumber = orderNumber;
+
     try {
       window.sessionStorage.setItem(`${STORAGE_PREFIX}${orderNumber}`, "true");
     } catch {
-      // Continue even when storage is unavailable.
+      // The page-level acknowledgement is enough for the current checkout session.
     }
 
     setOrderNumber(null);
