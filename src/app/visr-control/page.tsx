@@ -103,12 +103,20 @@ export default async function VisrControlPage({
       <>
         <ControlClient />
         {session ? (
-          <a
-            href="/visr-control/analytics"
-            className="fixed bottom-5 right-5 z-50 rounded-full border border-white/15 bg-black/80 px-5 py-3 text-sm text-white/70 shadow-2xl backdrop-blur-xl transition hover:bg-white hover:text-black"
-          >
-            Website Analytics
-          </a>
+          <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2">
+            <a
+              href="/visr-control/qris"
+              className="rounded-full bg-white px-5 py-3 text-sm font-medium text-black shadow-2xl transition hover:bg-white/85"
+            >
+              QRIS Verification
+            </a>
+            <a
+              href="/visr-control/analytics"
+              className="rounded-full border border-white/15 bg-black/80 px-5 py-3 text-sm text-white/70 shadow-2xl backdrop-blur-xl transition hover:bg-white hover:text-black"
+            >
+              Website Analytics
+            </a>
+          </div>
         ) : null}
       </>
     );
