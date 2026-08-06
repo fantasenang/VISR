@@ -1,0 +1,10 @@
+/* Prevent iOS Safari from auto-zooming when a checkout field receives focus.
+   Safari magnifies controls whose computed font size is below 16px and keeps
+   that page scale during client-side navigation. */
+@media screen and (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
