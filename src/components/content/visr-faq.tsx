@@ -6,7 +6,7 @@ const faqItems = [
   {
     question: "What is VISR Carry?",
     answer:
-      "VISR Carry is a handmade visor display created to carry and present 1:64 diecast through a magnetic mounting system. The car aligns to the frame through VISR Link, keeping the display focused on the collection rather than a conventional case.",
+      "VISR Carry is a handmade portable magnetic display for 1:64 diecast cars. Its clear acrylic visor protects the collection while VISR Link holds the car in position, creating a diecast display that keeps attention on the model rather than a conventional display case.",
   },
   {
     question: "What is included with VISR Carry?",
@@ -17,6 +17,11 @@ const faqItems = [
     question: "Which diecast cars are compatible?",
     answer:
       "VISR Carry is designed for 1:64 diecast, especially sports cars and hypercars. The display chamber measures 100 × 40 × 25 mm, so the car must remain within those dimensions. Measure unusually long, wide, or tall castings before ordering.",
+  },
+  {
+    question: "Is VISR compatible with Hot Wheels, Mini GT, Inno64, or Tomica?",
+    answer:
+      "Many Hot Wheels, Mini GT, Inno64, Tomica, and similar 1:64 diecast models can fit VISR Carry, but compatibility depends on the individual casting. The car must fit within the 100 × 40 × 25 mm chamber and provide a suitable underside area for VISR Link. Always measure oversized, wide-body, or unusually tall models before ordering.",
   },
   {
     question: "How is the car installed?",
@@ -70,6 +75,19 @@ const faqItems = [
   },
 ] as const;
 
+const faqStructuredData = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: faqItems.map((item) => ({
+    "@type": "Question",
+    name: item.question,
+    acceptedAnswer: {
+      "@type": "Answer",
+      text: item.answer,
+    },
+  })),
+};
+
 export function VisrFaq() {
   const [open, setOpen] = useState(false);
 
@@ -78,78 +96,86 @@ export function VisrFaq() {
   }, []);
 
   return (
-    <section id="faq" className="border-t border-white/[0.07] bg-[#030303]">
-      <div className="visr-container">
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-controls="visr-faq-panel"
-          onClick={() => setOpen((current) => !current)}
-          className="flex w-full items-center justify-between gap-6 py-6 text-left"
-        >
-          <span>
-            <span className="visr-label block text-white/32">Support</span>
-            <span className="mt-2 block text-base text-white/78">
-              Frequently Asked Questions
-            </span>
-          </span>
-          <span className="flex items-center gap-3 text-[10px] uppercase tracking-[0.16em] text-white/35">
-            {open ? "Close" : "Open"}
-            <span
-              aria-hidden="true"
-              className={`text-xl font-light transition-transform duration-300 ${open ? "rotate-45" : ""}`}
-            >
-              +
-            </span>
-          </span>
-        </button>
-
-        {open ? (
-          <div
-            id="visr-faq-panel"
-            className="grid gap-14 border-t border-white/10 py-20 md:grid-cols-12 md:py-28"
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(faqStructuredData).replace(/</g, "\\u003c"),
+        }}
+      />
+      <section id="faq" className="border-t border-white/[0.07] bg-[#030303]">
+        <div className="visr-container">
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls="visr-faq-panel"
+            onClick={() => setOpen((current) => !current)}
+            className="flex w-full items-center justify-between gap-6 py-6 text-left"
           >
-            <div className="md:col-span-4">
-              <p className="visr-label text-white/40">Frequently Asked Questions</p>
-              <h2 className="mt-6 max-w-[8ch] text-[clamp(3rem,6vw,6.6rem)] font-normal leading-[0.92] tracking-[-0.055em]">
-                Before you carry it.
-              </h2>
-              <p className="mt-7 max-w-sm text-sm leading-7 text-white/42">
-                Product fit, preorder timing, payment, care, and support—collected in one place.
-              </p>
-            </div>
+            <span>
+              <span className="visr-label block text-white/32">Support</span>
+              <span className="mt-2 block text-base text-white/78">
+                Frequently Asked Questions
+              </span>
+            </span>
+            <span className="flex items-center gap-3 text-[10px] uppercase tracking-[0.16em] text-white/35">
+              {open ? "Close" : "Open"}
+              <span
+                aria-hidden="true"
+                className={`text-xl font-light transition-transform duration-300 ${open ? "rotate-45" : ""}`}
+              >
+                +
+              </span>
+            </span>
+          </button>
 
-            <div className="md:col-span-7 md:col-start-6">
-              {faqItems.map((item, index) => (
-                <details
-                  key={item.question}
-                  className="group border-t border-white/10 py-0 last:border-b"
-                >
-                  <summary className="flex cursor-pointer list-none items-start justify-between gap-6 py-6 text-left [&::-webkit-details-marker]:hidden">
-                    <span className="flex gap-4">
-                      <span className="pt-1 text-[10px] tracking-[0.18em] text-white/25">
-                        {String(index + 1).padStart(2, "0")}
+          {open ? (
+            <div
+              id="visr-faq-panel"
+              className="grid gap-14 border-t border-white/10 py-20 md:grid-cols-12 md:py-28"
+            >
+              <div className="md:col-span-4">
+                <p className="visr-label text-white/40">Frequently Asked Questions</p>
+                <h2 className="mt-6 max-w-[8ch] text-[clamp(3rem,6vw,6.6rem)] font-normal leading-[0.92] tracking-[-0.055em]">
+                  Before you carry it.
+                </h2>
+                <p className="mt-7 max-w-sm text-sm leading-7 text-white/42">
+                  Product fit, preorder timing, payment, care, and support—collected in one place.
+                </p>
+              </div>
+
+              <div className="md:col-span-7 md:col-start-6">
+                {faqItems.map((item, index) => (
+                  <details
+                    key={item.question}
+                    className="group border-t border-white/10 py-0 last:border-b"
+                  >
+                    <summary className="flex cursor-pointer list-none items-start justify-between gap-6 py-6 text-left [&::-webkit-details-marker]:hidden">
+                      <span className="flex gap-4">
+                        <span className="pt-1 text-[10px] tracking-[0.18em] text-white/25">
+                          {String(index + 1).padStart(2, "0")}
+                        </span>
+                        <span className="max-w-xl text-base leading-7 text-white/82">
+                          {item.question}
+                        </span>
                       </span>
-                      <span className="max-w-xl text-base leading-7 text-white/82">
-                        {item.question}
+                      <span
+                        aria-hidden="true"
+                        className="mt-1 text-xl font-light text-white/35 transition-transform duration-300 group-open:rotate-45"
+                      >
+                        +
                       </span>
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      className="mt-1 text-xl font-light text-white/35 transition-transform duration-300 group-open:rotate-45"
-                    >
-                      +
-                    </span>
-                  </summary>
-                  <p className="max-w-2xl pb-7 pl-10 pr-10 text-sm leading-7 text-white/48">
-                    {item.answer}
-                  </p>
-                </details>
-              ))}
+                    </summary>
+                    <p className="max-w-2xl pb-7 pl-10 pr-10 text-sm leading-7 text-white/48">
+                      {item.answer}
+                    </p>
+                  </details>
+                ))}
+              </div>
             </div>
-          </div>
-        ) : null}
-      </div>
-    </section>
+          ) : null}
+        </div>
+      </section>
+    </>
   );
 }
