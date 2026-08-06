@@ -3,6 +3,9 @@
 import Image from "next/image";
 import { useState } from "react";
 
+const MAX_PROOF_BYTES = 4 * 1024 * 1024;
+const PROOF_TYPES = new Set(["image/jpeg", "image/png"]);
+
 function rupiah(value: number) {
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
@@ -14,6 +17,13 @@ function rupiah(value: number) {
 type ClaimResponse = {
   pendingVerification?: boolean;
   extendedUntil?: string;
+  error?: { message?: string };
+};
+
+type ProofResponse = {
+  uploaded?: boolean;
+  proofId?: string;
+  fileName?: string;
   error?: { message?: string };
 };
 
@@ -34,6 +44,10 @@ export default function QrisPaymentClient({
 }) {
   const [claiming, setClaiming] = useState(false);
   const [claimed, setClaimed] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [proofId, setProofId] = useState("");
+  const [proofName, setProofName] = useState("");
+  const [proofPreview, setProofPreview] = useState("");
   const [message, setMessage] = useState("");
 
   async function copyAmount() {
@@ -45,8 +59,54 @@ export default function QrisPaymentClient({
     }
   }
 
+  async function uploadProof(file: File) {
+    if (!PROOF_TYPES.has(file.type)) {
+      setMessage("Use a JPG or PNG payment proof.");
+      return;
+    }
+    if (file.size < 1 || file.size > MAX_PROOF_BYTES) {
+      setMessage("Payment proof must be 4 MB or smaller.");
+      return;
+    }
+
+    const nextPreview = URL.createObjectURL(file);
+    setProofPreview((previous) => {
+      if (previous) URL.revokeObjectURL(previous);
+      return nextPreview;
+    });
+    setProofId("");
+    setProofName(file.name);
+    setUploading(true);
+    setMessage("Uploading payment proof…");
+
+    try {
+      const body = new FormData();
+      body.append("orderNumber", orderNumber);
+      body.append("token", token);
+      body.append("proof", file, file.name);
+
+      const response = await fetch("/api/payments/qris/proof", {
+        method: "POST",
+        body,
+      });
+      const payload = (await response.json().catch(() => ({}))) as ProofResponse;
+      if (!response.ok || !payload.uploaded || !payload.proofId) {
+        throw new Error(payload.error?.message ?? "Payment proof could not be uploaded.");
+      }
+
+      setProofId(payload.proofId);
+      setProofName(payload.fileName || file.name);
+      setMessage("Payment proof uploaded. You can now submit your payment.");
+    } catch (error) {
+      setProofId("");
+      setMessage(error instanceof Error ? error.message : "Payment proof could not be uploaded.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
   async function confirmPayment() {
-    if (claiming || claimed) return;
+    if (claiming || claimed || uploading || !proofId) return;
     setClaiming(true);
     setMessage("");
 
@@ -54,7 +114,7 @@ export default function QrisPaymentClient({
       const response = await fetch("/api/payments/qris/claim", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderNumber, token }),
+        body: JSON.stringify({ orderNumber, token, proofId }),
       });
       const payload = (await response.json().catch(() => ({}))) as ClaimResponse;
       if (!response.ok || !payload.pendingVerification) {
@@ -153,13 +213,50 @@ export default function QrisPaymentClient({
               </div>
 
               <div className="mt-10">
+                <div className="mb-5 rounded-[1.35rem] border border-white/10 bg-white/[0.025] p-4">
+                  <div className="flex items-start gap-4">
+                    {proofPreview ? (
+                      <img src={proofPreview} alt="Selected payment proof" className="h-16 w-16 rounded-xl border border-white/10 object-cover" />
+                    ) : (
+                      <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border border-dashed border-white/15 text-[10px] uppercase tracking-[0.12em] text-white/25">Proof</div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-white/32">Payment proof required</p>
+                      <p className="mt-2 truncate text-sm text-white/62">{proofName || "Upload your successful payment screen"}</p>
+                      <p className="mt-1 text-xs leading-5 text-white/30">JPG or PNG, maximum 4 MB.</p>
+                    </div>
+                  </div>
+                  <label className={`mt-4 flex w-full cursor-pointer items-center justify-center rounded-full border border-white/15 px-4 py-3 text-sm transition hover:bg-white hover:text-black ${uploading || claimed ? "pointer-events-none opacity-50" : ""}`}>
+                    {uploading ? "Uploading…" : proofId ? "Replace payment proof" : "Upload payment proof"}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png"
+                      className="sr-only"
+                      disabled={uploading || claimed}
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) void uploadProof(file);
+                        event.currentTarget.value = "";
+                      }}
+                    />
+                  </label>
+                </div>
+
                 <button
                   type="button"
                   onClick={confirmPayment}
-                  disabled={claiming || claimed}
+                  disabled={claiming || claimed || uploading || !proofId}
                   className="w-full rounded-full bg-white px-6 py-4 text-sm font-medium text-black transition hover:bg-white/85 disabled:cursor-not-allowed disabled:opacity-55"
                 >
-                  {claimed ? "Awaiting Verification" : claiming ? "Submitting…" : "I Have Paid"}
+                  {claimed
+                    ? "Awaiting Verification"
+                    : claiming
+                      ? "Submitting…"
+                      : uploading
+                        ? "Uploading Proof…"
+                        : proofId
+                          ? "I Have Paid"
+                          : "Upload Proof to Continue"}
                 </button>
                 {message ? <p className="mt-4 text-sm leading-6 text-white/52">{message}</p> : null}
                 {claimed ? (
@@ -174,8 +271,8 @@ export default function QrisPaymentClient({
 
         <div className="mt-8 grid gap-4 text-xs leading-6 text-white/38 sm:grid-cols-3">
           <p>1. Download the QRIS image when paying from the same phone.</p>
-          <p>2. Select scan from gallery in your banking or e-wallet app.</p>
-          <p>3. Return here and tap “I Have Paid” after the transaction succeeds.</p>
+          <p>2. Select scan from gallery and pay the exact amount shown.</p>
+          <p>3. Upload the successful payment screen, then tap “I Have Paid”.</p>
         </div>
       </div>
     </main>
