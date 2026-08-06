@@ -10,7 +10,7 @@ import styles from "./link-system.module.css";
 const frames = [
   {
     number: "01",
-    src: "/media/phase-15/visr-e01.jpg",
+    src: "/media/phase-15/visr-e01.jpg?v=20260806-2",
     alt: "VISR Link displayed alone on a black surface",
     title: "The connection starts here.",
     detail: "VISR Link is the magnetic interface at the center of the system.",
@@ -196,6 +196,7 @@ export function LinkSystem() {
                 priority={index === 0}
                 sizes="(max-width: 767px) 100vw, 430px"
                 draggable={false}
+                unoptimized={frame.number === "01"}
               />
 
               <div className={styles.imageTreatment} aria-hidden="true" />
