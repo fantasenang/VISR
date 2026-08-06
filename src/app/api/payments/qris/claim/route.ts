@@ -123,6 +123,17 @@ export async function POST(request: Request) {
         });
     if (!paymentWrite.ok) throw new Error("QRIS_CLAIM_PAYMENT_WRITE_FAILED");
 
+    const reservationWrite = await fetch(
+      `${url}/rest/v1/inventory_reservations?order_id=eq.${encodeURIComponent(order.id)}&status=eq.active`,
+      {
+        method: "PATCH",
+        headers: headers(serviceRoleKey, "return=minimal"),
+        body: JSON.stringify({ expires_at: extendedExpiry, updated_at: claimedAt }),
+        cache: "no-store",
+      },
+    );
+    if (!reservationWrite.ok) throw new Error("QRIS_CLAIM_RESERVATION_WRITE_FAILED");
+
     const orderWrite = await fetch(`${url}/rest/v1/orders?id=eq.${encodeURIComponent(order.id)}&payment_status=eq.pending`, {
       method: "PATCH",
       headers: headers(serviceRoleKey, "return=minimal"),
@@ -140,6 +151,7 @@ export async function POST(request: Request) {
       orderId: order.id,
       orderNumber: order.order_number,
       expectedAmountIdr: amountIdr,
+      extendedUntil: extendedExpiry,
       claimedAt,
     }));
 
