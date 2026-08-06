@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { consumePaymentAccess } from "@/lib/commerce/payment-access";
 import { signQrisOrder } from "@/lib/commerce/qris-manual";
 
-const schema = z.object({
-  orderNumber: z.string().trim().regex(/^VISR\.B\d{2}\.\d{8}\.\d{3,}$/),
-});
+const schema = z.object({ orderId: z.string().uuid() });
 
 type OrderRow = {
+  id: string;
   order_number: string;
   payment_status: string;
   payment_expires_at: string;
@@ -23,24 +23,28 @@ export async function POST(request: Request) {
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json(
-      { error: { code: "INVALID_ORDER_NUMBER", message: "Order number is not valid." } },
+      { error: { code: "INVALID_ORDER_ACCESS", message: "Order access is not valid." } },
       { status: 400 },
     );
   }
 
   try {
+    const access = await consumePaymentAccess(parsed.data.orderId);
+    if (!access.allowed) {
+      return NextResponse.json(
+        { error: { code: "PAYMENT_ACCESS_REQUIRED", message: "This payment link is invalid or has expired." } },
+        { status: 401 },
+      );
+    }
+
     const { url, serviceRoleKey } = configuration();
     const response = await fetch(
-      `${url}/rest/v1/orders?select=order_number,payment_status,payment_expires_at&order_number=eq.${encodeURIComponent(parsed.data.orderNumber)}&limit=1`,
+      `${url}/rest/v1/orders?select=id,order_number,payment_status,payment_expires_at&id=eq.${encodeURIComponent(parsed.data.orderId)}&limit=1`,
       {
-        headers: {
-          apikey: serviceRoleKey,
-          Authorization: `Bearer ${serviceRoleKey}`,
-        },
+        headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
         cache: "no-store",
       },
     );
-
     if (!response.ok) throw new Error("QRIS_ORDER_LOOKUP_FAILED");
     const order = ((await response.json()) as OrderRow[])[0];
     if (!order) {
@@ -62,13 +66,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const token = signQrisOrder(order.order_number);
+    const token = signQrisOrder(order.order_number, order.payment_expires_at);
     const redirectUrl = `/checkout/qris?order_number=${encodeURIComponent(order.order_number)}&token=${encodeURIComponent(token)}`;
-
-    return NextResponse.json(
-      { redirectUrl },
-      { headers: { "Cache-Control": "no-store, max-age=0" } },
-    );
+    return NextResponse.json({ redirectUrl }, { headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch (error) {
     console.error(JSON.stringify({
       event: "QRIS_SESSION_FAILED",
