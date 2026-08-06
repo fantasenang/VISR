@@ -1,10 +1,16 @@
 "use client";
 
 import { useEffect } from "react";
+import { ORDER_ACCESS_STORAGE_KEY } from "./checkout-order-access-bridge";
 
 type SessionResponse = {
   redirectUrl?: string;
   error?: { message?: string };
+};
+
+type StoredOrderAccess = {
+  orderId?: string;
+  orderNumber?: string;
 };
 
 const COPY_REPLACEMENTS: Array<[string, string]> = [
@@ -20,6 +26,15 @@ const COPY_REPLACEMENTS: Array<[string, string]> = [
 
 function orderNumberFromPage() {
   return document.body.innerText.match(/VISR\.B\d{2}\.\d{8}\.\d{3,}/)?.[0] ?? null;
+}
+
+function readOrderAccess() {
+  try {
+    const raw = window.sessionStorage.getItem(ORDER_ACCESS_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as StoredOrderAccess) : null;
+  } catch {
+    return null;
+  }
 }
 
 function replacePaymentCopy() {
@@ -69,8 +84,11 @@ function installPaymentOverride() {
         event.stopImmediatePropagation();
 
         const orderNumber = orderNumberFromPage();
-        if (!orderNumber) {
-          window.alert("Order number could not be read. Refresh checkout and try again.");
+        const access = readOrderAccess();
+        const orderId = access?.orderId;
+
+        if (!orderId || !orderNumber || (access?.orderNumber && access.orderNumber !== orderNumber)) {
+          window.alert("Order access is not valid. Refresh checkout and create the reservation again.");
           return;
         }
 
@@ -81,7 +99,7 @@ function installPaymentOverride() {
           const response = await fetch("/api/payments/qris/session", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ orderNumber }),
+            body: JSON.stringify({ orderId }),
           });
           const payload = (await response.json().catch(() => ({}))) as SessionResponse;
           if (!response.ok || !payload.redirectUrl) {
