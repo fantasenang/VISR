@@ -27,8 +27,12 @@ async function resolveOriginId() {
   const configured = Number(process.env.RAJAONGKIR_ORIGIN_ID);
   if (Number.isInteger(configured) && configured > 0) return configured;
 
-  const matches = await searchDomesticDestinations("40291", 10);
-  const exact = matches.find((destination) => destination.zipCode === "40291");
+  const matches = await searchDomesticDestinations("40921", 10);
+  const exact = matches.find(
+    (destination) =>
+      destination.zipCode === "40921" &&
+      destination.subdistrictName.toUpperCase() === "SUKAMUKTI",
+  );
   if (!exact) throw new Error("RAJAONGKIR_ORIGIN_NOT_FOUND");
   return exact.id;
 }
