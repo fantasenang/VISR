@@ -24,6 +24,8 @@ type ApplyInput = {
   providerTransactionId: string | null;
   providerStatus: string;
   rawPayload: unknown;
+  provider?: string;
+  amountIdr?: number;
 };
 
 type ApplyResult = {
@@ -121,8 +123,9 @@ async function transitionReservations(input: ApplyInput, orderId: string) {
 }
 
 async function updatePayment(input: ApplyInput, order: OrderRow) {
+  const provider = input.provider ?? "midtrans";
   const readResponse = await fetch(
-    `${input.supabaseUrl}/rest/v1/payments?select=id,provider_transaction_id&order_id=eq.${encodeURIComponent(order.id)}&provider=eq.midtrans&limit=1`,
+    `${input.supabaseUrl}/rest/v1/payments?select=id,provider_transaction_id&order_id=eq.${encodeURIComponent(order.id)}&provider=eq.${encodeURIComponent(provider)}&limit=1`,
     { headers: headers(input.serviceRoleKey), cache: "no-store" },
   );
   if (!readResponse.ok) throw new Error("PAYMENT_FALLBACK_PAYMENT_READ_FAILED");
@@ -134,13 +137,13 @@ async function updatePayment(input: ApplyInput, order: OrderRow) {
     input.providerTransactionId &&
     payment.provider_transaction_id !== input.providerTransactionId
   ) {
-    throw new Error("MIDTRANS_TRANSACTION_ALREADY_ASSIGNED");
+    throw new Error("PAYMENT_TRANSACTION_ALREADY_ASSIGNED");
   }
 
   const body = {
     provider_transaction_id: payment?.provider_transaction_id ?? input.providerTransactionId,
     provider_status: input.providerStatus,
-    amount_idr: order.total_idr,
+    amount_idr: input.amountIdr ?? order.total_idr,
     raw_payload: input.rawPayload,
     updated_at: new Date().toISOString(),
   };
@@ -164,7 +167,7 @@ async function updatePayment(input: ApplyInput, order: OrderRow) {
     headers: headers(input.serviceRoleKey, "return=minimal"),
     body: JSON.stringify({
       order_id: order.id,
-      provider: "midtrans",
+      provider,
       ...body,
     }),
     cache: "no-store",
