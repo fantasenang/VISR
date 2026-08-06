@@ -39,7 +39,7 @@ export default async function HomePage() {
             <div className="md:col-span-8 md:col-start-5">
               <h2 className="visr-display">The collection is always the hero.</h2>
               <p className="visr-copy mt-9">
-                VISR is a display system created around the collection—not the frame. Light reveals the material, precision protects the object, and every interaction returns attention to what matters.
+                VISR is a portable magnetic display system for 1:64 diecast cars, created around the collection—not the frame. Its clear acrylic visor protects the object while VISR Link keeps compatible Hot Wheels, Mini GT, Inno64, Tomica, and other collector models visually elevated.
               </p>
             </div>
           </div>
@@ -116,7 +116,7 @@ export default async function HomePage() {
                 <p className="visr-label text-white/35">VISR</p>
                 <FooterTagline />
                 <p className="mt-8 max-w-md text-sm leading-7 text-white/42">
-                  A handmade magnetic display system for collectors who want the car—not the frame—to remain the hero.
+                  A handmade portable magnetic display for 1:64 diecast collectors who want the car—not the frame—to remain the hero.
                 </p>
               </div>
 
