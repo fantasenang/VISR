@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { MobileOnlyPage } from "@/components/layout/mobile-only-page";
 import CheckoutApiErrorNormalizer from "./checkout-api-error-normalizer";
-import CheckoutAvailabilityGuard from "./checkout-availability-guard";
 import CheckoutClient from "./checkout-client";
 import { CheckoutOrderAccessBridge } from "./checkout-order-access-bridge";
 import CheckoutPolish from "./checkout-polish";
@@ -111,7 +110,6 @@ export default async function CheckoutPage() {
         </div>
         <CheckoutClient products={checkoutProducts} />
         <CheckoutPolish />
-        <CheckoutAvailabilityGuard />
       </PreorderGate>
     </MobileOnlyPage>
   );
