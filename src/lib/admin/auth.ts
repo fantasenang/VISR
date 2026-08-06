@@ -6,13 +6,16 @@ export const ADMIN_EMAIL = "malaikatampan@icloud.com";
 export const ADMIN_SESSION_COOKIE = "visr_control_session";
 
 const SESSION_TTL_SECONDS = 12 * 60 * 60;
+const SESSION_VERSION = 2;
 const SETUP_CODE_SHA256 = "e4ffd5ddb776beb11b7c83c1328ac1b0f3ad1009c7441e3147a3dcdb43142822";
 
 type AdminSession = {
+  version: number;
   username: string;
   email: string;
   role: "owner";
   issuedAt: number;
+  mfaVerifiedAt: number;
   expiresAt: number;
 };
 
@@ -42,7 +45,7 @@ function getSessionSecret() {
   const configured = process.env.AUTH_SECRET?.trim();
   if (configured) return configured;
   const { serviceRoleKey } = getSupabaseConfig();
-  return createHash("sha256").update(`visr-control-v1:${serviceRoleKey}`).digest("hex");
+  return createHash("sha256").update(`visr-control-v2:${serviceRoleKey}`).digest("hex");
 }
 
 function sign(value: string) {
@@ -63,10 +66,12 @@ export function isValidSetupCode(value: string) {
 export function createAdminSessionToken(): { token: string; session: AdminSession } {
   const now = Math.floor(Date.now() / 1000);
   const session: AdminSession = {
+    version: SESSION_VERSION,
     username: ADMIN_USERNAME,
     email: ADMIN_EMAIL,
     role: "owner",
     issuedAt: now,
+    mfaVerifiedAt: now,
     expiresAt: now + SESSION_TTL_SECONDS,
   };
   const payload = Buffer.from(JSON.stringify(session)).toString("base64url");
@@ -95,7 +100,10 @@ export function verifyAdminSessionToken(token: string | undefined): AdminSession
     const session = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as AdminSession;
     const now = Math.floor(Date.now() / 1000);
     if (
+      session.version !== SESSION_VERSION ||
       session.expiresAt <= now ||
+      !Number.isInteger(session.mfaVerifiedAt) ||
+      session.mfaVerifiedAt < session.issuedAt ||
       session.username !== ADMIN_USERNAME ||
       session.email !== ADMIN_EMAIL ||
       session.role !== "owner"
