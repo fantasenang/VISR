@@ -221,6 +221,28 @@
   border: 0;
 }
 
+@media (max-width: 640px) {
+  .e01 .image {
+    transform: translateY(6%) scale(0.9);
+    transform-origin: 50% 66%;
+  }
+
+  .e02 .image {
+    transform: scale(0.84);
+    transform-origin: 50% 52%;
+  }
+
+  .e03 .image {
+    transform: scale(0.84);
+    transform-origin: 50% 54%;
+  }
+
+  .e04 .image {
+    transform: scale(0.86);
+    transform-origin: 50% 50%;
+  }
+}
+
 @media (min-width: 768px) {
   .stage {
     box-shadow: 0 0 0 1px rgb(255 255 255 / 0.04), 0 48px 120px rgb(0 0 0 / 0.72);
