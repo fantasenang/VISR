@@ -18,7 +18,7 @@ export type PackingProfile = ShippingCart & PackageDimensions & {
 const WEIGHT_GRAMS = {
   carry: 500,
   halo: 150,
-  link: 25,
+  link: 10,
 } as const;
 
 function wholeQuantity(value: number) {
@@ -36,7 +36,11 @@ export function getPackingProfile(cart: ShippingCart): PackingProfile {
 
   let dimensions: PackageDimensions;
 
-  if (carryQty === 0 && haloQty === 1) {
+  if (carryQty === 0 && haloQty === 0 && linkQty === 1) {
+    dimensions = { lengthCm: 5, widthCm: 3, heightCm: 3 };
+  } else if (carryQty === 0 && haloQty === 0 && linkQty >= 2) {
+    dimensions = { lengthCm: 5, widthCm: 3, heightCm: Math.min(15, linkQty * 3) };
+  } else if (carryQty === 0 && haloQty === 1) {
     dimensions = { lengthCm: 15, widthCm: 8, heightCm: 5 };
   } else if (carryQty === 0 && haloQty >= 2) {
     dimensions = { lengthCm: 15, widthCm: 10, heightCm: 10 };
