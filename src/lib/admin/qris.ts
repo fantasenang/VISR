@@ -14,6 +14,10 @@ type PaymentRow = {
   updated_at: string;
 };
 
+type ProofRow = {
+  order_id: string;
+};
+
 type OrderRow = {
   id: string;
   order_number: string;
@@ -38,6 +42,7 @@ export type QrisClaim = {
   paymentStatus: string;
   paymentExpiresAt: string;
   claimedAt: string;
+  proofAvailable: boolean;
 };
 
 function config() {
@@ -67,13 +72,23 @@ export async function getPendingQrisClaims(): Promise<QrisClaim[]> {
 
   const orderIds = payments.map((payment) => payment.order_id);
   const inFilter = `in.(${orderIds.join(",")})`;
-  const orderResponse = await fetch(
-    `${url}/rest/v1/orders?select=id,order_number,customer_name,whatsapp,email,total_idr,payment_status,payment_expires_at,notes&id=${encodeURIComponent(inFilter)}`,
-    { headers: headers(serviceRoleKey), cache: "no-store" },
-  );
+  const [orderResponse, proofResponse] = await Promise.all([
+    fetch(
+      `${url}/rest/v1/orders?select=id,order_number,customer_name,whatsapp,email,total_idr,payment_status,payment_expires_at,notes&id=${encodeURIComponent(inFilter)}`,
+      { headers: headers(serviceRoleKey), cache: "no-store" },
+    ),
+    fetch(
+      `${url}/rest/v1/qris_payment_proofs?select=order_id&order_id=${encodeURIComponent(inFilter)}`,
+      { headers: headers(serviceRoleKey), cache: "no-store" },
+    ),
+  ]);
   if (!orderResponse.ok) throw new Error("QRIS_CLAIM_ORDER_LIST_FAILED");
+  if (!proofResponse.ok) throw new Error("QRIS_CLAIM_PROOF_LIST_FAILED");
+
   const orders = (await orderResponse.json()) as OrderRow[];
+  const proofs = (await proofResponse.json()) as ProofRow[];
   const orderById = new Map(orders.map((order) => [order.id, order]));
+  const proofOrderIds = new Set(proofs.map((proof) => proof.order_id));
 
   return payments.flatMap((payment) => {
     const order = orderById.get(payment.order_id);
@@ -91,6 +106,7 @@ export async function getPendingQrisClaims(): Promise<QrisClaim[]> {
       paymentStatus: order.payment_status,
       paymentExpiresAt: order.payment_expires_at,
       claimedAt: typeof rawClaimedAt === "string" ? rawClaimedAt : payment.updated_at,
+      proofAvailable: proofOrderIds.has(order.id),
     }];
   });
 }

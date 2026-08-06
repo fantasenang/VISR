@@ -19,6 +19,11 @@ type TelegramQrisClaim = {
   expectedAmountIdr: number;
   uniqueCode: number;
   claimedAt: string;
+  proof: {
+    bytes: ArrayBuffer;
+    mimeType: string;
+    fileName: string;
+  };
 };
 
 function rupiah(value: number) {
@@ -46,21 +51,26 @@ function controlUrl(path = "/visr-control") {
   return `${base}${path}`;
 }
 
+function telegramConfig() {
+  const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
+  const chatId = process.env.TELEGRAM_CHAT_ID?.trim();
+  if (!token || !chatId) return null;
+  return { token, chatId };
+}
+
 async function sendTelegramMessage(input: {
   text: string;
   buttonText: string;
   buttonUrl: string;
 }) {
-  const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
-  const chatId = process.env.TELEGRAM_CHAT_ID?.trim();
+  const config = telegramConfig();
+  if (!config) return { sent: false as const, reason: "not_configured" as const };
 
-  if (!token || !chatId) return { sent: false as const, reason: "not_configured" as const };
-
-  const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+  const response = await fetch(`https://api.telegram.org/bot${config.token}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      chat_id: chatId,
+      chat_id: config.chatId,
       text: input.text,
       parse_mode: "HTML",
       disable_web_page_preview: true,
@@ -79,27 +89,58 @@ async function sendTelegramMessage(input: {
   return { sent: true as const };
 }
 
+async function sendTelegramPhoto(input: {
+  caption: string;
+  bytes: ArrayBuffer;
+  mimeType: string;
+  fileName: string;
+  buttonText: string;
+  buttonUrl: string;
+}) {
+  const config = telegramConfig();
+  if (!config) return { sent: false as const, reason: "not_configured" as const };
+
+  const body = new FormData();
+  body.append("chat_id", config.chatId);
+  body.append("photo", new Blob([input.bytes], { type: input.mimeType }), input.fileName);
+  body.append("caption", input.caption);
+  body.append("parse_mode", "HTML");
+  body.append("reply_markup", JSON.stringify({
+    inline_keyboard: [[{ text: input.buttonText, url: input.buttonUrl }]],
+  }));
+
+  const response = await fetch(`https://api.telegram.org/bot${config.token}/sendPhoto`, {
+    method: "POST",
+    body,
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const failure = await response.text().catch(() => "");
+    throw new Error(`TELEGRAM_PHOTO_SEND_FAILED:${response.status}:${failure.slice(0, 300)}`);
+  }
+
+  return { sent: true as const };
+}
+
 export async function sendTelegramQrisClaim(claim: TelegramQrisClaim) {
-  const text = [
+  const caption = [
     "<b>⚠️ QRIS PAYMENT CLAIMED</b>",
     "",
-    "Customer menyatakan pembayaran sudah dilakukan dan sedang menunggu verifikasi.",
+    `<b>Order</b> <code>${escapeHtml(claim.orderNumber)}</code>`,
+    `<b>Customer</b> ${escapeHtml(claim.customerName)}`,
+    `<b>Nominal</b> ${escapeHtml(rupiah(claim.expectedAmountIdr))}`,
+    `<b>Matching code</b> <code>+${String(claim.uniqueCode).padStart(3, "0")}</code>`,
+    `<b>Claimed</b> ${escapeHtml(jakartaDateTime(claim.claimedAt))} WIB`,
     "",
-    `<b>Order</b>\n<code>${escapeHtml(claim.orderNumber)}</code>`,
-    "",
-    `<b>Customer</b>\n${escapeHtml(claim.customerName)}`,
-    "",
-    `<b>Nominal yang harus masuk</b>\n${escapeHtml(rupiah(claim.expectedAmountIdr))}`,
-    "",
-    `<b>Matching code</b>\n<code>+${String(claim.uniqueCode).padStart(3, "0")}</code>`,
-    "",
-    `<b>Claimed</b>\n${escapeHtml(jakartaDateTime(claim.claimedAt))} WIB`,
-    "",
-    "Periksa transaksi Merchant BCA. Jangan verifikasi berdasarkan screenshot customer.",
+    "Bukti dari customer terlampir. Tetap cocokkan nominal dengan transaksi Merchant BCA sebelum verifikasi.",
   ].join("\n");
 
-  return sendTelegramMessage({
-    text,
+  return sendTelegramPhoto({
+    caption,
+    bytes: claim.proof.bytes,
+    mimeType: claim.proof.mimeType,
+    fileName: claim.proof.fileName,
     buttonText: "🔎 Verify QRIS Payment",
     buttonUrl: controlUrl("/visr-control/qris"),
   });

@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
+  downloadQrisPaymentProof,
+  qrisProofJsonHeaders,
+  type QrisPaymentProofRow,
+} from "@/lib/commerce/qris-payment-proof";
+import {
   QRIS_PROVIDER,
   qrisPaymentAmount,
   qrisUniqueCode,
@@ -11,6 +16,7 @@ import { sendTelegramQrisClaim } from "@/lib/notifications/telegram";
 const schema = z.object({
   orderNumber: z.string().trim().regex(/^VISR\.B\d{2}\.\d{8}\.\d{3,}$/),
   token: z.string().trim().min(20).max(200),
+  proofId: z.string().uuid(),
 });
 
 type OrderRow = {
@@ -78,6 +84,22 @@ export async function POST(request: Request) {
       );
     }
 
+    const proofResponse = await fetch(
+      `${url}/rest/v1/qris_payment_proofs?select=id,order_id,storage_path,original_name,mime_type,byte_size,uploaded_at,used_at&id=eq.${encodeURIComponent(parsed.data.proofId)}&order_id=eq.${encodeURIComponent(order.id)}&used_at=is.null&limit=1`,
+      { headers: qrisProofJsonHeaders(serviceRoleKey), cache: "no-store" },
+    );
+    if (!proofResponse.ok) throw new Error("QRIS_CLAIM_PROOF_READ_FAILED");
+    const proof = ((await proofResponse.json()) as QrisPaymentProofRow[])[0];
+    if (!proof) {
+      return NextResponse.json(
+        { error: { code: "PROOF_REQUIRED", message: "Upload your payment proof before submitting." } },
+        { status: 409 },
+      );
+    }
+
+    const proofFile = await downloadQrisPaymentProof(proof.storage_path);
+    const proofBytes = await proofFile.arrayBuffer();
+
     const claimedAt = new Date().toISOString();
     const uniqueCode = qrisUniqueCode(order.order_number);
     const amountIdr = qrisPaymentAmount(order.total_idr, order.order_number);
@@ -106,6 +128,9 @@ export async function POST(request: Request) {
         unique_code: uniqueCode,
         expected_amount_idr: amountIdr,
         claimed_at: claimedAt,
+        proof_id: proof.id,
+        proof_storage_path: proof.storage_path,
+        proof_mime_type: proof.mime_type,
       },
       updated_at: claimedAt,
     };
@@ -148,10 +173,29 @@ export async function POST(request: Request) {
     });
     if (!orderWrite.ok) throw new Error("QRIS_CLAIM_ORDER_WRITE_FAILED");
 
+    const proofWrite = await fetch(
+      `${url}/rest/v1/qris_payment_proofs?id=eq.${encodeURIComponent(proof.id)}&used_at=is.null`,
+      {
+        method: "PATCH",
+        headers: headers(serviceRoleKey, "return=minimal"),
+        body: JSON.stringify({ used_at: claimedAt, updated_at: claimedAt }),
+        cache: "no-store",
+      },
+    );
+    if (!proofWrite.ok) {
+      console.error(JSON.stringify({
+        event: "QRIS_PAYMENT_PROOF_MARK_USED_FAILED",
+        orderId: order.id,
+        orderNumber: order.order_number,
+        proofId: proof.id,
+      }));
+    }
+
     console.info(JSON.stringify({
       event: "QRIS_PAYMENT_CLAIMED",
       orderId: order.id,
       orderNumber: order.order_number,
+      proofId: proof.id,
       expectedAmountIdr: amountIdr,
       extendedUntil: extendedExpiry,
       claimedAt,
@@ -164,6 +208,11 @@ export async function POST(request: Request) {
         expectedAmountIdr: amountIdr,
         uniqueCode,
         claimedAt,
+        proof: {
+          bytes: proofBytes,
+          mimeType: proof.mime_type,
+          fileName: proof.original_name,
+        },
       });
       console.info(JSON.stringify({
         event: notification.sent ? "TELEGRAM_QRIS_CLAIM_SENT" : "TELEGRAM_QRIS_CLAIM_NOT_CONFIGURED",

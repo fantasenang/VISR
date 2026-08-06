@@ -55,7 +55,7 @@ export default async function QrisVerificationPage({
           <p className="text-[10px] uppercase tracking-[0.2em] text-white/35">Manual payment operations</p>
           <h1 className="mt-5 text-[clamp(3rem,9vw,6.5rem)] font-normal leading-[0.9] tracking-[-0.065em]">Match. Verify. Secure.</h1>
           <p className="mt-7 max-w-2xl text-sm leading-7 text-white/48">
-            Only mark an order paid after the exact amount appears in the BCA merchant transaction record. Customer screenshots are not proof of settlement.
+            Review the customer upload, then only mark an order paid after the exact amount appears in the BCA merchant transaction record. The uploaded image is supporting evidence, not settlement confirmation.
           </p>
         </section>
 
@@ -78,7 +78,7 @@ export default async function QrisVerificationPage({
         {claims.length === 0 ? (
           <div className="rounded-[2rem] border border-white/10 bg-white/[0.025] p-8 md:p-12">
             <p className="text-2xl tracking-[-0.04em]">No QRIS payments are waiting.</p>
-            <p className="mt-4 text-sm leading-6 text-white/42">New claims appear here after a customer taps “I Have Paid”.</p>
+            <p className="mt-4 text-sm leading-6 text-white/42">New claims appear here after a customer uploads proof and taps “I Have Paid”.</p>
           </div>
         ) : (
           <div className="space-y-5">
@@ -95,6 +95,28 @@ export default async function QrisVerificationPage({
                     <p className="mt-3 text-3xl tracking-[-0.045em]">{rupiah(claim.expectedAmountIdr)}</p>
                     <p className="mt-2 font-mono text-xs text-white/38">Code +{String(claim.uniqueCode).padStart(3, "0")}</p>
                   </div>
+                </div>
+
+                <div className="mt-7 border-t border-white/10 pt-6">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-white/32">Customer payment proof</p>
+                  {claim.proofAvailable ? (
+                    <a
+                      href={`/api/admin/qris/proof?orderNumber=${encodeURIComponent(claim.orderNumber)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-4 block overflow-hidden rounded-[1.5rem] border border-white/10 bg-black"
+                    >
+                      <img
+                        src={`/api/admin/qris/proof?orderNumber=${encodeURIComponent(claim.orderNumber)}`}
+                        alt={`Payment proof for ${claim.orderNumber}`}
+                        className="max-h-[34rem] w-full object-contain"
+                      />
+                    </a>
+                  ) : (
+                    <div className="mt-4 rounded-2xl border border-amber-300/20 bg-amber-300/[0.05] p-4 text-sm text-amber-100/75">
+                      No uploaded proof is attached to this legacy claim. Verify only from the BCA transaction record.
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-7 grid gap-6 border-t border-white/10 pt-6 md:grid-cols-[1fr_auto] md:items-end">

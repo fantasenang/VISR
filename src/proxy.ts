@@ -4,6 +4,8 @@ const REQUEST_ID_PATTERN = /^[A-Za-z0-9._:-]{8,128}$/;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const MAX_BUCKETS = 10_000;
 const MAX_JSON_BODY_BYTES = 64 * 1024;
+const MAX_PAYMENT_PROOF_BODY_BYTES = 4_500_000;
+const QRIS_PROOF_UPLOAD_PATH = "/api/payments/qris/proof";
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const ORIGIN_EXEMPT_PATHS = new Set([
   "/api/payments/midtrans/webhook",
@@ -91,19 +93,29 @@ function hasValidBrowserOrigin(request: NextRequest) {
   }
 }
 
+function bodySizeLimit(request: NextRequest) {
+  return request.method === "POST" && request.nextUrl.pathname === QRIS_PROOF_UPLOAD_PATH
+    ? MAX_PAYMENT_PROOF_BODY_BYTES
+    : MAX_JSON_BODY_BYTES;
+}
+
 function hasAcceptableBodySize(request: NextRequest) {
   if (!MUTATING_METHODS.has(request.method)) return true;
   const contentLength = request.headers.get("content-length");
   if (!contentLength) return true;
   const bytes = Number(contentLength);
-  return Number.isInteger(bytes) && bytes >= 0 && bytes <= MAX_JSON_BODY_BYTES;
+  return Number.isInteger(bytes) && bytes >= 0 && bytes <= bodySizeLimit(request);
 }
 
 function hasSupportedContentType(request: NextRequest) {
   if (!MUTATING_METHODS.has(request.method)) return true;
   const contentLength = Number(request.headers.get("content-length") ?? "0");
   if (contentLength === 0) return true;
-  return request.headers.get("content-type")?.toLowerCase().startsWith("application/json") ?? false;
+  const contentType = request.headers.get("content-type")?.toLowerCase() ?? "";
+  if (request.method === "POST" && request.nextUrl.pathname === QRIS_PROOF_UPLOAD_PATH) {
+    return contentType.startsWith("multipart/form-data;");
+  }
+  return contentType.startsWith("application/json");
 }
 
 function resolveRateLimitPolicy(pathname: string, method: string): RateLimitPolicy | null {
@@ -152,18 +164,19 @@ export function proxy(request: NextRequest) {
   requestHeaders.set("x-request-id", requestId);
 
   if (!hasAcceptableBodySize(request)) {
+    const maximumBytes = bodySizeLimit(request);
     logSecurityEvent("WARN", "API_BODY_TOO_LARGE", request, requestId, {
       contentLength: request.headers.get("content-length"),
-      maximumBytes: MAX_JSON_BODY_BYTES,
+      maximumBytes,
     });
-    return apiError(requestId, "PAYLOAD_TOO_LARGE", "Request body exceeds the 64 KB limit.", 413);
+    return apiError(requestId, "PAYLOAD_TOO_LARGE", `Request body exceeds the ${maximumBytes} byte limit.`, 413);
   }
 
   if (!hasSupportedContentType(request)) {
     logSecurityEvent("WARN", "API_UNSUPPORTED_MEDIA_TYPE", request, requestId, {
       contentType: request.headers.get("content-type"),
     });
-    return apiError(requestId, "UNSUPPORTED_MEDIA_TYPE", "Use application/json for this endpoint.", 415);
+    return apiError(requestId, "UNSUPPORTED_MEDIA_TYPE", "Use the supported content type for this endpoint.", 415);
   }
 
   if (!hasValidBrowserOrigin(request)) {
