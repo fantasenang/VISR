@@ -24,6 +24,7 @@ const schema = await source("src/lib/commerce/order-schema.ts");
 const input = await source("src/lib/security/input.ts");
 const webhook = await source("src/app/api/payments/midtrans/webhook/route.ts");
 const snap = await source("src/app/api/payments/snap/route.ts");
+const cancel = await source("src/app/api/orders/cancel/route.ts");
 const config = await source("next.config.ts");
 
 required("64 KB gateway limit", proxy, /MAX_JSON_BODY_BYTES\s*=\s*64\s*\*\s*1024/);
@@ -45,6 +46,9 @@ required("payment amount validation", webhook, /AMOUNT_MISMATCH/);
 required("database webhook idempotency", webhook, /apply_midtrans_notification/);
 required("payable-state validation", snap, /payment_status\s*!==\s*"pending"/);
 required("payment expiry validation", snap, /payment_expires_at/);
+required("multi-provider cancellation lookup", cancel, /select=provider,provider_transaction_id,provider_status/);
+required("QRIS claim cancellation guard", cancel, /"claimed"/);
+prohibited("Midtrans-only cancellation lookup", cancel, /provider=eq\.midtrans/);
 required("enforced CSP", config, /key:\s*"Content-Security-Policy"/);
 prohibited("report-only CSP", config, /Content-Security-Policy-Report-Only/);
 

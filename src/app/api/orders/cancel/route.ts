@@ -19,6 +19,7 @@ type OrderRow = {
 };
 
 type PaymentRow = {
+  provider: string;
   provider_transaction_id: string | null;
   provider_status: string | null;
 };
@@ -43,6 +44,12 @@ function headers(serviceRoleKey: string) {
     Authorization: `Bearer ${serviceRoleKey}`,
     "Content-Type": "application/json",
   };
+}
+
+function paymentHasStarted(payment: PaymentRow) {
+  const providerStatus = payment.provider_status?.toLowerCase() ?? "";
+  return Boolean(payment.provider_transaction_id) ||
+    ["pending", "capture", "settlement", "claimed", "manual_verified"].includes(providerStatus);
 }
 
 export async function POST(request: Request) {
@@ -77,7 +84,7 @@ export async function POST(request: Request) {
       { headers: headers(serviceRoleKey), cache: "no-store" },
     ),
     fetch(
-      `${supabaseUrl}/rest/v1/payments?select=provider_transaction_id,provider_status&order_id=eq.${encodeURIComponent(orderId)}&provider=eq.midtrans&limit=1`,
+      `${supabaseUrl}/rest/v1/payments?select=provider,provider_transaction_id,provider_status&order_id=eq.${encodeURIComponent(orderId)}`,
       { headers: headers(serviceRoleKey), cache: "no-store" },
     ),
   ]);
@@ -98,7 +105,7 @@ export async function POST(request: Request) {
   }
 
   const order = ((await orderResponse.json()) as OrderRow[])[0];
-  const payment = ((await paymentResponse.json()) as PaymentRow[])[0];
+  const payments = (await paymentResponse.json()) as PaymentRow[];
   if (!order || !contactMatches(order, contact)) {
     return NextResponse.json(
       { error: { code: "ORDER_NOT_FOUND", message: "Reservation could not be verified." } },
@@ -113,15 +120,14 @@ export async function POST(request: Request) {
     );
   }
 
-  const providerStatus = payment?.provider_status?.toLowerCase() ?? "";
-  const paymentStarted = Boolean(payment?.provider_transaction_id) ||
-    ["pending", "capture", "settlement"].includes(providerStatus);
-  if (paymentStarted) {
+  const startedPayment = payments.find(paymentHasStarted);
+  if (startedPayment) {
     logger.info("CUSTOMER_RESERVATION_CANCEL_SKIPPED_PAYMENT_STARTED", {
       requestId,
       orderId,
       orderNumber,
-      providerStatus: providerStatus || null,
+      provider: startedPayment.provider,
+      providerStatus: startedPayment.provider_status?.toLowerCase() || null,
       durationMs: elapsedMs(startedAt),
     });
     return NextResponse.json(
