@@ -13,6 +13,8 @@ type StoredOrderAccess = {
   orderNumber?: string;
 };
 
+const ORDER_NUMBER_SAVED_PREFIX = "visr-order-number-saved:";
+
 const COPY_REPLACEMENTS: Array<[string, string]> = [
   [
     "Midtrans will handle the payment securely, while the webhook confirms the final payment status.",
@@ -26,6 +28,16 @@ const COPY_REPLACEMENTS: Array<[string, string]> = [
 
 function orderNumberFromPage() {
   return document.body.innerText.match(/VISR\.B\d{2}\.\d{8}\.\d{3,}/)?.[0] ?? null;
+}
+
+function hasSavedOrderNumber(orderNumber: string) {
+  if (document.documentElement.dataset.visrSavedOrderNumber === orderNumber) return true;
+
+  try {
+    return window.sessionStorage.getItem(`${ORDER_NUMBER_SAVED_PREFIX}${orderNumber}`) === "true";
+  } catch {
+    return false;
+  }
 }
 
 function readOrderAccess() {
@@ -89,6 +101,11 @@ function installPaymentOverride() {
 
         if (!orderId || !orderNumber || (access?.orderNumber && access.orderNumber !== orderNumber)) {
           window.alert("Order access is not valid. Refresh checkout and create the reservation again.");
+          return;
+        }
+
+        if (!hasSavedOrderNumber(orderNumber)) {
+          window.alert("Save your order number and confirm it before continuing to QRIS.");
           return;
         }
 
