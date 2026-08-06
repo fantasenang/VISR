@@ -5,6 +5,7 @@ import CheckoutAvailabilityGuard from "./checkout-availability-guard";
 import CheckoutClient from "./checkout-client";
 import { CheckoutOrderAccessBridge } from "./checkout-order-access-bridge";
 import CheckoutPolish from "./checkout-polish";
+import CheckoutViewportGuard from "./checkout-viewport-guard";
 import PaymentResultRedirect from "./payment-result-redirect";
 import PreorderGate from "./preorder-gate";
 import QrisPaymentOverride from "./qris-payment-override";
@@ -68,6 +69,7 @@ export default async function CheckoutPage() {
   return (
     <MobileOnlyPage>
       <PreorderGate forceOpen={previewOpen}>
+        <CheckoutViewportGuard />
         <PaymentResultRedirect />
         <CheckoutApiErrorNormalizer />
         <CheckoutOrderAccessBridge />
