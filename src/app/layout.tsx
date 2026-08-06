@@ -3,7 +3,6 @@ import { Suspense } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import { PaymentReturnGateway } from "@/components/commerce/payment-return-gateway";
 import { ProductNameNormalizer } from "@/components/brand/product-name-normalizer";
-import { GlobalScrollStability } from "@/components/layout/global-scroll-stability";
 import { MetaPixelTracker } from "@/components/marketing/meta-pixel-tracker";
 import { ConsentAnalytics } from "@/components/privacy/consent-analytics";
 import { PrivacyConsent } from "@/components/privacy/privacy-consent";
@@ -49,7 +48,6 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
       <body className="visr-grain antialiased">
-        <GlobalScrollStability />
         {children}
         <ProductNameNormalizer />
         <MetaPixelTracker />
