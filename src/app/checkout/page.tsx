@@ -6,6 +6,7 @@ import CheckoutClient from "./checkout-client";
 import { CheckoutOrderAccessBridge } from "./checkout-order-access-bridge";
 import CheckoutPolish from "./checkout-polish";
 import CheckoutViewportGuard from "./checkout-viewport-guard";
+import OrderNumberSavePrompt from "./order-number-save-prompt";
 import PaymentResultRedirect from "./payment-result-redirect";
 import PreorderGate from "./preorder-gate";
 import QrisPaymentOverride from "./qris-payment-override";
@@ -74,6 +75,7 @@ export default async function CheckoutPage() {
         <CheckoutApiErrorNormalizer />
         <CheckoutOrderAccessBridge />
         <QrisPaymentOverride />
+        <OrderNumberSavePrompt />
         <div className="border-b border-white/[0.08] bg-[#050505] px-6 pt-8 text-white md:px-12">
           <div className="mx-auto max-w-7xl overflow-hidden rounded-[1.75rem] border border-white/15 bg-white/[0.055]">
             <div className="grid gap-5 px-6 py-6 sm:grid-cols-[1fr_auto] sm:items-center md:px-8">
