@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import { PaymentReturnGateway } from "@/components/commerce/payment-return-gateway";
@@ -7,6 +7,7 @@ import { MetaPixelTracker } from "@/components/marketing/meta-pixel-tracker";
 import { ConsentAnalytics } from "@/components/privacy/consent-analytics";
 import { PrivacyConsent } from "@/components/privacy/privacy-consent";
 import "./globals.css";
+import "./ios-form-controls.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -17,6 +18,11 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
 
 export const metadata: Metadata = {
   title: {
