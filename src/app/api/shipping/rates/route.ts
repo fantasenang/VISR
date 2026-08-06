@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { products } from "@/lib/commerce/catalog";
 import { getChargeableWeightGrams, getPackingProfile } from "@/lib/shipping/packing";
-import { calculateDomesticRates, searchDomesticDestinations } from "@/lib/shipping/rajaongkir";
+import { calculateDomesticRates, searchDomesticDestinations, type RajaOngkirRate } from "@/lib/shipping/rajaongkir";
 import { elapsedMs, logger, requestIdFrom } from "@/lib/observability/logger";
 
 const requestSchema = z.object({
@@ -35,6 +35,20 @@ async function resolveOriginId() {
   );
   if (!exact) throw new Error("RAJAONGKIR_ORIGIN_NOT_FOUND");
   return exact.id;
+}
+
+function selectPreferredServices(rates: RajaOngkirRate[], preferredServices: string[]) {
+  const validRates = rates
+    .filter((rate) => Number.isFinite(rate.costIdr) && rate.costIdr >= 0)
+    .sort((a, b) => a.costIdr - b.costIdr);
+
+  if (!validRates.length) return [];
+
+  const preferred = preferredServices
+    .map((service) => validRates.find((rate) => rate.service === service))
+    .filter((rate): rate is RajaOngkirRate => Boolean(rate));
+
+  return preferred.length > 0 ? preferred : [validRates[0]];
 }
 
 export async function POST(request: Request) {
@@ -77,9 +91,13 @@ export async function POST(request: Request) {
       }),
     ]);
 
-    const rates = [...jneRates, ...jntRates]
+    const filteredRates = [
+      ...selectPreferredServices(jneRates, ["REG", "YES"]),
+      ...selectPreferredServices(jntRates, ["EZ", "NDD"]),
+    ];
+
+    const rates = filteredRates
       .filter((rate) => supportedCouriers.has(rate.courierCode))
-      .filter((rate) => Number.isFinite(rate.costIdr) && rate.costIdr >= 0)
       .map((rate) => ({
         id: `${rate.courierCode}:${rate.service}`,
         courier: rate.courierCode,
