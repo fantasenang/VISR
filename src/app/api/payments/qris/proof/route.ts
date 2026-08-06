@@ -86,10 +86,13 @@ export async function POST(request: Request) {
       return json({ error: { code: "ORDER_EXPIRED", message: "The payment reservation has expired." } }, 409);
     }
 
-    const storagePath = `${order.id}/proof.jpg`;
+    const storageExtension = sanitized.mimeType === "image/png" ? "png" : "jpg";
+    const storagePath = `${order.id}/proof.${storageExtension}`;
+    const uploadArrayBuffer = new ArrayBuffer(sanitized.bytes.byteLength);
+    new Uint8Array(uploadArrayBuffer).set(sanitized.bytes);
     const uploadBody = new FormData();
     uploadBody.append("cacheControl", "0");
-    uploadBody.append("", new Blob([sanitized.bytes], { type: sanitized.mimeType }), sanitized.fileName);
+    uploadBody.append("", new Blob([uploadArrayBuffer], { type: sanitized.mimeType }), sanitized.fileName);
 
     const storageResponse = await fetch(qrisProofStorageUrl(url, storagePath), {
       method: "POST",
