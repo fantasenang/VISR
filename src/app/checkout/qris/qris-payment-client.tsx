@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const MAX_PROOF_BYTES = 4 * 1024 * 1024;
 const PROOF_TYPES = new Set(["image/jpeg", "image/png"]);
@@ -49,6 +49,27 @@ export default function QrisPaymentClient({
   const [proofName, setProofName] = useState("");
   const [proofPreview, setProofPreview] = useState("");
   const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    document.documentElement.style.overflowX = "hidden";
+    document.body.style.overflowX = "hidden";
+
+    const settleViewport = () => {
+      window.scrollTo({ top: 1, left: 0, behavior: "auto" });
+    };
+
+    const first = window.setTimeout(settleViewport, 80);
+    const second = window.setTimeout(settleViewport, 420);
+    window.visualViewport?.addEventListener("resize", settleViewport);
+
+    return () => {
+      window.clearTimeout(first);
+      window.clearTimeout(second);
+      window.visualViewport?.removeEventListener("resize", settleViewport);
+      document.documentElement.style.overflowX = "";
+      document.body.style.overflowX = "";
+    };
+  }, []);
 
   async function copyAmount() {
     try {
@@ -130,8 +151,8 @@ export default function QrisPaymentClient({
   }
 
   return (
-    <main className="min-h-screen bg-[#030303] px-5 py-8 text-white sm:px-8 md:py-14">
-      <div className="mx-auto max-w-3xl">
+    <main className="min-h-dvh w-full overflow-x-hidden bg-[#030303] px-5 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-[calc(2rem+env(safe-area-inset-top))] text-white sm:px-8 md:py-14">
+      <div className="mx-auto w-full max-w-3xl">
         <div className="flex items-center justify-between border-b border-white/10 pb-5">
           <a href="/" className="text-sm tracking-[0.24em]">VISR.</a>
           <span className="text-[10px] uppercase tracking-[0.2em] text-white/35">BCA QRIS</span>
@@ -179,21 +200,8 @@ export default function QrisPaymentClient({
                 />
               </div>
               <div className="mt-4 grid grid-cols-2 gap-3">
-                <a
-                  href="/api/payments/qris/image"
-                  download="VISR-QRIS-BCA.png"
-                  className="rounded-full border border-white/15 px-4 py-3 text-center text-sm transition hover:bg-white hover:text-black"
-                >
-                  Download QRIS
-                </a>
-                <a
-                  href="/api/payments/qris/image?mode=inline"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rounded-full border border-white/15 px-4 py-3 text-center text-sm transition hover:bg-white hover:text-black"
-                >
-                  Open Fullscreen
-                </a>
+                <a href="/api/payments/qris/image" download="VISR-QRIS-BCA.png" className="rounded-full border border-white/15 px-4 py-3 text-center text-sm transition hover:bg-white hover:text-black">Download QRIS</a>
+                <a href="/api/payments/qris/image?mode=inline" target="_blank" rel="noreferrer" className="rounded-full border border-white/15 px-4 py-3 text-center text-sm transition hover:bg-white hover:text-black">Open Fullscreen</a>
               </div>
             </div>
 
@@ -201,9 +209,7 @@ export default function QrisPaymentClient({
               <div>
                 <p className="text-[10px] uppercase tracking-[0.2em] text-white/32">Pay exactly</p>
                 <p className="mt-4 text-[clamp(2.5rem,8vw,4.5rem)] leading-none tracking-[-0.055em]">{rupiah(paymentAmountIdr)}</p>
-                <button type="button" onClick={copyAmount} className="mt-5 text-sm text-white/55 underline decoration-white/20 underline-offset-4 transition hover:text-white">
-                  Copy payment amount
-                </button>
+                <button type="button" onClick={copyAmount} className="mt-5 text-sm text-white/55 underline decoration-white/20 underline-offset-4 transition hover:text-white">Copy payment amount</button>
 
                 <div className="mt-9 space-y-4 border-t border-white/10 pt-7 text-sm leading-6 text-white/50">
                   <div className="flex justify-between gap-6"><span>Order total</span><span className="text-white/75">{rupiah(totalIdr)}</span></div>
@@ -215,11 +221,7 @@ export default function QrisPaymentClient({
               <div className="mt-10">
                 <div className="mb-5 rounded-[1.35rem] border border-white/10 bg-white/[0.025] p-4">
                   <div className="flex items-start gap-4">
-                    {proofPreview ? (
-                      <img src={proofPreview} alt="Selected payment proof" className="h-16 w-16 rounded-xl border border-white/10 object-cover" />
-                    ) : (
-                      <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border border-dashed border-white/15 text-[10px] uppercase tracking-[0.12em] text-white/25">Proof</div>
-                    )}
+                    {proofPreview ? <img src={proofPreview} alt="Selected payment proof" className="h-16 w-16 rounded-xl border border-white/10 object-cover" /> : <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border border-dashed border-white/15 text-[10px] uppercase tracking-[0.12em] text-white/25">Proof</div>}
                     <div className="min-w-0 flex-1">
                       <p className="text-[10px] uppercase tracking-[0.18em] text-white/32">Payment proof required</p>
                       <p className="mt-2 truncate text-sm text-white/62">{proofName || "Upload your successful payment screen"}</p>
@@ -228,42 +230,15 @@ export default function QrisPaymentClient({
                   </div>
                   <label className={`mt-4 flex w-full cursor-pointer items-center justify-center rounded-full border border-white/15 px-4 py-3 text-sm transition hover:bg-white hover:text-black ${uploading || claimed ? "pointer-events-none opacity-50" : ""}`}>
                     {uploading ? "Uploading…" : proofId ? "Replace payment proof" : "Upload payment proof"}
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png"
-                      className="sr-only"
-                      disabled={uploading || claimed}
-                      onChange={(event) => {
-                        const file = event.target.files?.[0];
-                        if (file) void uploadProof(file);
-                        event.currentTarget.value = "";
-                      }}
-                    />
+                    <input type="file" accept="image/jpeg,image/png" className="sr-only" disabled={uploading || claimed} onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadProof(file); event.currentTarget.value = ""; }} />
                   </label>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={confirmPayment}
-                  disabled={claiming || claimed || uploading || !proofId}
-                  className="w-full rounded-full bg-white px-6 py-4 text-sm font-medium text-black transition hover:bg-white/85 disabled:cursor-not-allowed disabled:opacity-55"
-                >
-                  {claimed
-                    ? "Awaiting Verification"
-                    : claiming
-                      ? "Submitting…"
-                      : uploading
-                        ? "Uploading Proof…"
-                        : proofId
-                          ? "I Have Paid"
-                          : "Upload Proof to Continue"}
+                <button type="button" onClick={confirmPayment} disabled={claiming || claimed || uploading || !proofId} className="w-full rounded-full bg-white px-6 py-4 text-sm font-medium text-black transition hover:bg-white/85 disabled:cursor-not-allowed disabled:opacity-55">
+                  {claimed ? "Awaiting Verification" : claiming ? "Submitting…" : uploading ? "Uploading Proof…" : proofId ? "I Have Paid" : "Upload Proof to Continue"}
                 </button>
                 {message ? <p className="mt-4 text-sm leading-6 text-white/52">{message}</p> : null}
-                {claimed ? (
-                  <a href={`/order?order_number=${encodeURIComponent(orderNumber)}`} className="mt-5 inline-flex text-sm text-white/65 underline decoration-white/20 underline-offset-4">
-                    Track this order →
-                  </a>
-                ) : null}
+                {claimed ? <a href={`/order?order_number=${encodeURIComponent(orderNumber)}`} className="mt-5 inline-flex text-sm text-white/65 underline decoration-white/20 underline-offset-4">Track this order →</a> : null}
               </div>
             </div>
           </div>
