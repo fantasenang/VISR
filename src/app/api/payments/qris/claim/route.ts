@@ -32,14 +32,17 @@ function headers(key: string, prefer?: string) {
   };
 }
 
+function invalidSession() {
+  return NextResponse.json(
+    { error: { code: "INVALID_QRIS_SESSION", message: "QRIS payment session is not valid." } },
+    { status: 401 },
+  );
+}
+
 export async function POST(request: Request) {
   const parsed = schema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success || !verifyQrisOrderToken(parsed.data?.orderNumber ?? "", parsed.data?.token ?? "")) {
-    return NextResponse.json(
-      { error: { code: "INVALID_QRIS_SESSION", message: "QRIS payment session is not valid." } },
-      { status: 401 },
-    );
-  }
+  if (!parsed.success) return invalidSession();
+  if (!verifyQrisOrderToken(parsed.data.orderNumber, parsed.data.token)) return invalidSession();
 
   const url = process.env.SUPABASE_URL?.replace(/\/$/, "");
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
