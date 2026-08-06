@@ -1,6 +1,5 @@
 import "server-only";
 
-import { applyPaymentStateFallback } from "@/lib/commerce/payment-state-fallback";
 import {
   QRIS_PROVIDER,
   qrisPaymentAmount,
@@ -14,9 +13,7 @@ type PaymentRow = {
   updated_at: string;
 };
 
-type ProofRow = {
-  order_id: string;
-};
+type ProofRow = { order_id: string };
 
 type OrderRow = {
   id: string;
@@ -28,6 +25,13 @@ type OrderRow = {
   payment_status: string;
   payment_expires_at: string;
   notes: string | null;
+};
+
+type AtomicVerificationRow = {
+  order_id: string;
+  already_paid: boolean;
+  finalized_reservations: number;
+  current_status: string;
 };
 
 export type QrisClaim = {
@@ -120,36 +124,41 @@ export async function verifyQrisClaim(orderNumber: string) {
   if (!orderResponse.ok) throw new Error("QRIS_VERIFY_ORDER_READ_FAILED");
   const order = ((await orderResponse.json()) as Pick<OrderRow, "order_number" | "total_idr" | "payment_status">[])[0];
   if (!order) throw new Error("ORDER_NOT_FOUND");
-  if (order.payment_status === "paid") return { alreadyPaid: true };
-  if (order.payment_status !== "pending") throw new Error("ORDER_NOT_PENDING");
 
   const verifiedAt = new Date().toISOString();
   const expectedAmountIdr = qrisPaymentAmount(order.total_idr, order.order_number);
-  const result = await applyPaymentStateFallback({
-    supabaseUrl: url,
-    serviceRoleKey,
-    orderNumber: order.order_number,
-    paymentStatus: "paid",
-    provider: QRIS_PROVIDER,
-    amountIdr: expectedAmountIdr,
-    providerTransactionId: `qris-bca:${order.order_number}`,
-    providerStatus: "manual_verified",
-    rawPayload: {
-      channel: "bca_static_qris",
-      order_number: order.order_number,
-      expected_amount_idr: expectedAmountIdr,
-      unique_code: qrisUniqueCode(order.order_number),
-      verified_at: verifiedAt,
-      verification: "VISR Control manual BCA transaction match",
-    },
+  const rpcResponse = await fetch(`${url}/rest/v1/rpc/verify_qris_payment`, {
+    method: "POST",
+    headers: headers(serviceRoleKey),
+    body: JSON.stringify({
+      p_order_number: order.order_number,
+      p_expected_amount_idr: expectedAmountIdr,
+      p_verified_at: verifiedAt,
+    }),
+    cache: "no-store",
   });
+  if (!rpcResponse.ok) {
+    const failure = await rpcResponse.text().catch(() => "");
+    throw new Error(`QRIS_ATOMIC_VERIFICATION_FAILED:${rpcResponse.status}:${failure.slice(0, 160)}`);
+  }
+  const payload = (await rpcResponse.json()) as AtomicVerificationRow[] | AtomicVerificationRow;
+  const result = Array.isArray(payload) ? payload[0] : payload;
+  if (!result?.order_id) throw new Error("QRIS_ATOMIC_VERIFICATION_EMPTY");
 
   console.info(JSON.stringify({
-    event: "QRIS_PAYMENT_VERIFIED",
+    event: "QRIS_PAYMENT_VERIFIED_ATOMICALLY",
+    orderId: result.order_id,
     orderNumber: order.order_number,
     expectedAmountIdr,
+    finalizedReservations: result.finalized_reservations,
+    alreadyPaid: result.already_paid,
     verifiedAt,
   }));
 
-  return result;
+  return {
+    orderId: result.order_id,
+    alreadyPaid: result.already_paid,
+    finalizedReservations: result.finalized_reservations,
+    currentStatus: result.current_status,
+  };
 }
