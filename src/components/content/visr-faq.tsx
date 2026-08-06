@@ -46,7 +46,7 @@ const faqItems = [
   {
     question: "Which payment methods are available?",
     answer:
-      "Payment is available through virtual account and QRIS. A reservation remains active for 24 hours while payment is pending. Inventory is reserved during that payment window and released automatically if payment is not completed.",
+      "Payment is currently available through BCA QRIS. After completing the payment, upload the payment proof and submit the confirmation shown on the website. VISR verifies the payment manually against the BCA merchant transaction record. A reservation remains active for 24 hours while payment is pending, and the reserved inventory is released automatically if payment is not completed.",
   },
   {
     question: "Can I cancel or refund my preorder?",
