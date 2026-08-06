@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 const MAX_PROOF_BYTES = 4 * 1024 * 1024;
 const PROOF_TYPES = new Set(["image/jpeg", "image/png"]);
@@ -49,27 +49,6 @@ export default function QrisPaymentClient({
   const [proofName, setProofName] = useState("");
   const [proofPreview, setProofPreview] = useState("");
   const [message, setMessage] = useState("");
-
-  useEffect(() => {
-    document.documentElement.style.overflowX = "hidden";
-    document.body.style.overflowX = "hidden";
-
-    const settleViewport = () => {
-      window.scrollTo({ top: 1, left: 0, behavior: "auto" });
-    };
-
-    const first = window.setTimeout(settleViewport, 80);
-    const second = window.setTimeout(settleViewport, 420);
-    window.visualViewport?.addEventListener("resize", settleViewport);
-
-    return () => {
-      window.clearTimeout(first);
-      window.clearTimeout(second);
-      window.visualViewport?.removeEventListener("resize", settleViewport);
-      document.documentElement.style.overflowX = "";
-      document.body.style.overflowX = "";
-    };
-  }, []);
 
   async function copyAmount() {
     try {
@@ -158,9 +137,9 @@ export default function QrisPaymentClient({
           <span className="text-[10px] uppercase tracking-[0.2em] text-white/35">BCA QRIS</span>
         </div>
 
-        <section className="py-12 md:py-16">
+        <section className="py-10 md:py-16">
           <p className="text-[10px] uppercase tracking-[0.22em] text-white/35">Secure your reservation</p>
-          <h1 className="mt-5 text-[clamp(3.2rem,10vw,7rem)] font-normal leading-[0.9] tracking-[-0.065em]">Scan. Pay. Confirm.</h1>
+          <h1 className="mt-5 text-[clamp(2.8rem,9vw,7rem)] font-normal leading-[0.9] tracking-[-0.065em]">Scan. Pay. Confirm.</h1>
           <p className="mt-7 max-w-xl text-sm leading-7 text-white/48">
             Scan using any mobile-banking or e-wallet app. Enter the exact amount below so the payment can be matched to your order.
           </p>
@@ -186,9 +165,9 @@ export default function QrisPaymentClient({
             </div>
           </div>
 
-          <div className="grid gap-10 p-6 md:grid-cols-[minmax(0,1fr)_minmax(260px,0.82fr)] md:p-9">
+          <div className="grid gap-9 p-6 md:grid-cols-[minmax(0,1fr)_minmax(260px,0.82fr)] md:p-9">
             <div>
-              <div className="rounded-[1.5rem] bg-white p-4 md:p-5">
+              <div className="mx-auto w-full max-w-[17rem] rounded-[1.35rem] bg-white p-3.5 md:max-w-none md:p-5">
                 <Image
                   src="/api/payments/qris/image?mode=inline"
                   alt="VISR BCA QRIS payment code"
@@ -199,9 +178,9 @@ export default function QrisPaymentClient({
                   className="aspect-square w-full object-contain"
                 />
               </div>
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <a href="/api/payments/qris/image" download="VISR-QRIS-BCA.png" className="rounded-full border border-white/15 px-4 py-3 text-center text-sm transition hover:bg-white hover:text-black">Download QRIS</a>
-                <a href="/api/payments/qris/image?mode=inline" target="_blank" rel="noreferrer" className="rounded-full border border-white/15 px-4 py-3 text-center text-sm transition hover:bg-white hover:text-black">Open Fullscreen</a>
+              <div className="mx-auto mt-4 grid w-full max-w-[17rem] grid-cols-2 gap-3 md:max-w-none">
+                <a href="/api/payments/qris/image" download="VISR-QRIS-BCA.png" className="rounded-full border border-white/15 px-3 py-3 text-center text-xs transition hover:bg-white hover:text-black md:text-sm">Download QRIS</a>
+                <a href="/api/payments/qris/image?mode=inline" target="_blank" rel="noreferrer" className="rounded-full border border-white/15 px-3 py-3 text-center text-xs transition hover:bg-white hover:text-black md:text-sm">Open Fullscreen</a>
               </div>
             </div>
 
