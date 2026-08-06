@@ -10,9 +10,9 @@ import "./globals.css";
 import "./ios-form-controls.css";
 
 const SITE_URL = "https://visr.works";
-const SITE_TITLE = "VISR — Carry Your Build";
+const SITE_TITLE = "VISR — Magnetic Display for 1:64 Diecast";
 const SITE_DESCRIPTION =
-  "Handmade magnetic display systems for 1:64 diecast collectors. Discover VISR Carry, VISR Link, and the VISR display ecosystem.";
+  "VISR Carry is a handmade portable magnetic display for 1:64 diecast cars, including compatible Hot Wheels, Mini GT, Inno64, and Tomica models.";
 const SHARE_IMAGE = "/media/phase-16/visr-c01.jpg";
 
 const structuredData = {
@@ -24,7 +24,7 @@ const structuredData = {
       name: "VISR",
       url: SITE_URL,
       description:
-        "VISR creates handmade magnetic display systems for 1:64 diecast collectors.",
+        "VISR creates handmade portable magnetic and acrylic display systems for 1:64 diecast collectors.",
       address: {
         "@type": "PostalAddress",
         addressLocality: "Bandung",
@@ -36,6 +36,7 @@ const structuredData = {
       "@id": `${SITE_URL}/#website`,
       url: SITE_URL,
       name: "VISR",
+      alternateName: "VISR Works",
       description: SITE_DESCRIPTION,
       publisher: { "@id": `${SITE_URL}/#organization` },
       inLanguage: "en-ID",
@@ -71,12 +72,25 @@ export const metadata: Metadata = {
   },
   keywords: [
     "VISR",
+    "VISR Works",
     "VISR Carry",
     "VISR Link",
     "diecast display",
-    "1:64 diecast display",
-    "magnetic diecast display",
+    "display diecast",
     "display diecast Indonesia",
+    "tempat pajangan diecast",
+    "pajangan mobil diecast",
+    "1:64 diecast display",
+    "display mobil miniatur 1:64",
+    "magnetic diecast display",
+    "portable diecast display",
+    "acrylic diecast display",
+    "display Hot Wheels",
+    "Hot Wheels display case",
+    "Mini GT display",
+    "Inno64 display",
+    "Tomica display",
+    "diecast collector display",
   ],
   authors: [{ name: "VISR", url: SITE_URL }],
   creator: "VISR",
@@ -103,7 +117,7 @@ export const metadata: Metadata = {
     images: [
       {
         url: SHARE_IMAGE,
-        alt: "VISR Carry magnetic display system for 1:64 diecast",
+        alt: "VISR Carry portable magnetic display for 1:64 diecast cars",
       },
     ],
   },
