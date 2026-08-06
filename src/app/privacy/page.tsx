@@ -31,8 +31,9 @@ export default function PrivacyPage() {
             <p className="mt-4">
               This can include your name, email address, WhatsApp number,
               delivery address, postal code, selected products, shipping
-              service, payment status, and order notes. VISR uses this data to
-              operate the preorder, arrange delivery, provide support, prevent
+              service, payment status, payment confirmation, payment proof,
+              and order notes. VISR uses this data to operate the preorder,
+              arrange delivery, verify payment, provide support, prevent
               duplicate or fraudulent requests, and maintain transaction
               records.
             </p>
@@ -81,21 +82,30 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-xl text-white">Payment and delivery providers</h2>
             <p className="mt-4">
-              Payment information is processed through Midtrans. Delivery
-              information may be used with shipping and logistics providers to
-              calculate rates and fulfill the order. VISR does not store your
-              card, bank, or wallet credentials on this website.
+              Payment is currently completed through BCA QRIS. After payment,
+              the customer submits a confirmation and uploads a JPG or PNG
+              payment proof. VISR verifies the payment manually against the
+              BCA merchant transaction record. Payment proof and verification
+              details are stored privately and are only available to the
+              systems and people required to process the order and resolve a
+              payment issue. VISR does not store your bank, card, or wallet
+              credentials on this website.
+            </p>
+            <p className="mt-4">
+              Delivery information may be shared with shipping and logistics
+              providers to calculate rates, create delivery records, and
+              fulfil the order.
             </p>
           </section>
 
           <section>
             <h2 className="text-xl text-white">Retention and access</h2>
             <p className="mt-4">
-              Order and transaction records are retained for operational,
-              support, accounting, dispute, and legal requirements. Access is
-              limited to the systems and people required to run VISR. You may
-              ask about your order data or request a correction through VISR’s
-              support channel.
+              Order, payment verification, and transaction records are retained
+              for operational, support, accounting, dispute, fraud-prevention,
+              and legal requirements. Access is limited to the systems and
+              people required to run VISR. You may ask about your order data or
+              request a correction through VISR’s support channel.
             </p>
             <a
               href="https://wa.me/6281806288892"
@@ -118,7 +128,7 @@ export default function PrivacyPage() {
 
         <div className="mt-16 border-t border-white/10 pt-8 text-xs leading-6 text-white/35">
           <p>VISR · Carry Your Build.</p>
-          <p className="mt-2">Last updated: 2 August 2026</p>
+          <p className="mt-2">Last updated: 6 August 2026</p>
         </div>
       </div>
     </main>
