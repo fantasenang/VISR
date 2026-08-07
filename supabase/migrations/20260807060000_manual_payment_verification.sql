@@ -1,7 +1,7 @@
 -- Atomic owner-confirmed payment flow for funds verified directly in the bank account.
 
 create or replace function public.verify_manual_payment(
-  p_order_id uuid,
+  p_order_number text,
   p_amount_idr integer,
   p_reference text default null,
   p_verified_at timestamptz default now()
@@ -24,7 +24,7 @@ declare
   finalized_count integer := 0;
   provider_reference text;
 begin
-  if p_order_id is null
+  if length(coalesce(trim(p_order_number), '')) < 10
      or p_amount_idr is null
      or p_amount_idr < 1
      or p_amount_idr > 2000000000 then
@@ -33,7 +33,7 @@ begin
 
   select o.* into target_order
   from public.orders as o
-  where o.id = p_order_id
+  where o.order_number = trim(p_order_number)
   for update;
 
   if not found then
@@ -168,7 +168,7 @@ begin
 end;
 $function$;
 
-revoke all on function public.verify_manual_payment(uuid, integer, text, timestamptz)
+revoke all on function public.verify_manual_payment(text, integer, text, timestamptz)
   from public, anon, authenticated;
-grant execute on function public.verify_manual_payment(uuid, integer, text, timestamptz)
+grant execute on function public.verify_manual_payment(text, integer, text, timestamptz)
   to service_role;
