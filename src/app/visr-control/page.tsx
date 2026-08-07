@@ -81,6 +81,9 @@ export default async function VisrControlPage({
           <a href="/visr-control/qris" className="rounded-full bg-white px-5 py-3 text-sm font-medium text-black shadow-2xl transition hover:bg-white/85">
             QRIS Verification
           </a>
+          <a href="/visr-control/manual-payment" className="rounded-full border border-emerald-300/25 bg-black/80 px-5 py-3 text-sm text-emerald-100/80 shadow-2xl backdrop-blur-xl transition hover:bg-emerald-100 hover:text-black">
+            Manual Payment
+          </a>
           <a href="/visr-control/analytics" className="rounded-full border border-white/15 bg-black/80 px-5 py-3 text-sm text-white/70 shadow-2xl backdrop-blur-xl transition hover:bg-white hover:text-black">
             Website Analytics
           </a>
