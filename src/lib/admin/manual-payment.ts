@@ -17,7 +17,7 @@ function config() {
 }
 
 export async function verifyManualPayment(input: {
-  orderId: string;
+  orderNumber: string;
   amountIdr: number;
   reference?: string | null;
 }) {
@@ -30,7 +30,7 @@ export async function verifyManualPayment(input: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      p_order_id: input.orderId,
+      p_order_number: input.orderNumber.trim(),
       p_amount_idr: input.amountIdr,
       p_reference: input.reference?.trim() || null,
       p_verified_at: new Date().toISOString(),
