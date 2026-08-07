@@ -23,6 +23,7 @@ declare
   reservation record;
   finalized_count integer := 0;
   provider_reference text;
+  manual_payload jsonb;
 begin
   if length(coalesce(trim(p_order_number), '')) < 10
      or p_amount_idr is null
@@ -113,39 +114,45 @@ begin
     nullif(trim(p_reference), ''),
     'manual-bca:' || target_order.order_number || ':' || floor(extract(epoch from p_verified_at))::bigint::text
   );
+  manual_payload := jsonb_build_object(
+    'channel', 'bca_account_reconciliation',
+    'verified_at', p_verified_at,
+    'verified_by', 'VISR Control owner',
+    'order_total_idr', target_order.total_idr,
+    'received_amount_idr', p_amount_idr,
+    'reference', provider_reference
+  );
 
-  insert into public.payments (
-    order_id,
-    provider,
-    provider_transaction_id,
-    provider_status,
-    amount_idr,
-    raw_payload,
-    created_at,
-    updated_at
-  ) values (
-    target_order.id,
-    'manual_bca',
-    provider_reference,
-    'manual_verified',
-    p_amount_idr,
-    jsonb_build_object(
-      'channel', 'bca_account_reconciliation',
-      'verified_at', p_verified_at,
-      'verified_by', 'VISR Control owner',
-      'order_total_idr', target_order.total_idr,
-      'received_amount_idr', p_amount_idr,
-      'reference', provider_reference
-    ),
-    p_verified_at,
-    p_verified_at
-  )
-  on conflict (order_id, provider) do update
-  set provider_transaction_id = excluded.provider_transaction_id,
-      provider_status = excluded.provider_status,
-      amount_idr = excluded.amount_idr,
-      raw_payload = excluded.raw_payload,
-      updated_at = excluded.updated_at;
+  update public.payments as payment
+  set provider_transaction_id = provider_reference,
+      provider_status = 'manual_verified',
+      amount_idr = p_amount_idr,
+      raw_payload = manual_payload,
+      updated_at = p_verified_at
+  where payment.order_id = target_order.id
+    and payment.provider = 'manual_bca';
+
+  if not found then
+    insert into public.payments (
+      order_id,
+      provider,
+      provider_transaction_id,
+      provider_status,
+      amount_idr,
+      raw_payload,
+      created_at,
+      updated_at
+    ) values (
+      target_order.id,
+      'manual_bca',
+      provider_reference,
+      'manual_verified',
+      p_amount_idr,
+      manual_payload,
+      p_verified_at,
+      p_verified_at
+    );
+  end if;
 
   -- Preserve attempted gateway rows, but make it explicit that they were not
   -- the source of the final payment confirmation.
