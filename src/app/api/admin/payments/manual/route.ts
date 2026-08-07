@@ -3,8 +3,10 @@ import { z } from "zod";
 import { getAdminSession } from "@/lib/admin/auth";
 import { verifyManualPayment } from "@/lib/admin/manual-payment";
 
+const orderPattern = /^VISR\.B\d{2}\.\d{8}\.\d{3,}$/;
+
 const requestSchema = z.object({
-  orderId: z.string().uuid(),
+  orderNumber: z.string().trim().regex(orderPattern),
   amountIdr: z.number().int().positive().max(2_000_000_000),
   reference: z.string().trim().max(200).nullable().optional(),
 });
@@ -28,7 +30,7 @@ export async function POST(request: Request) {
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return json(
-      { error: { code: "INVALID_MANUAL_PAYMENT", message: "Check the order and received amount." } },
+      { error: { code: "INVALID_MANUAL_PAYMENT", message: "Check the order number and received amount." } },
       400,
     );
   }
