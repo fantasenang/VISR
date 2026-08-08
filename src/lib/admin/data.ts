@@ -153,6 +153,17 @@ function groupByOrder<T extends { order_id: string }>(rows: T[]) {
   return grouped;
 }
 
+function adminAddressWithShipping(order: OrderRow, shipment: ShipmentRow | undefined) {
+  const method = [shipment?.courier, shipment?.service].filter(Boolean).join(" — ");
+  const shippingCost = new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    maximumFractionDigits: 0,
+  }).format(order.shipping_cost_idr);
+  const shippingSummary = method ? `Pengiriman ${method} · Ongkir ${shippingCost}` : `Pengiriman belum tercatat · Ongkir ${shippingCost}`;
+  return `${shippingSummary} · ${order.address_line}`;
+}
+
 export async function getAdminDashboardData() {
   const [orderRows, productRows] = await Promise.all([
     readRows<OrderRow>(
@@ -185,7 +196,7 @@ export async function getAdminDashboardData() {
       customerName: order.customer_name,
       email: order.email,
       whatsapp: order.whatsapp,
-      address: order.address_line,
+      address: adminAddressWithShipping(order, shipment),
       province: order.province,
       city: order.city,
       postalCode: order.postal_code,
